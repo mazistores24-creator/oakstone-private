@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#131719">
+  <title>Private Operations | Oakstone Financial</title>
+  <link rel="stylesheet" href="/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/bootstrap-overrides.css">
+</head>
+<body class="app-page staff-portal">
+  <div class="ops-shell">
+    <aside class="ops-sidebar">
+      <a class="ops-brand" href="/dashboard" aria-label="Oakstone Financial overview">
+        <span class="ops-brand-mark">O</span>
+        <span><strong data-brand>Oakstone Financial</strong><small>PRIVATE OPERATIONS</small></span>
+      </a>
+      <div class="ops-nav-label">OPERATIONS</div>
+      <nav class="ops-nav" aria-label="Operations">
+        <button class="ops-nav-item active" data-view="overview"><span class="ops-nav-icon">◫</span>Overview</button>
+        <button class="ops-nav-item" data-view="housebook"><span class="ops-nav-icon">▤</span>House book</button>
+        <button class="ops-nav-item" data-view="clients"><span class="ops-nav-icon">♙</span>Clients</button>
+        <button class="ops-nav-item" data-view="support"><span class="ops-nav-icon">✉</span>Client support</button>
+        <button class="ops-nav-item" data-view="allocations"><span class="ops-nav-icon">◉</span>Allocations</button>
+      </nav>
+      <div class="ops-nav-label controls-label">CONTROLS</div>
+      <nav class="ops-nav" aria-label="Controls">
+        <button class="ops-nav-item" data-view="pricing"><span class="ops-nav-icon">⌁</span>Pricing</button>
+        <button class="ops-nav-item" data-view="audit"><span class="ops-nav-icon">◷</span>Audit &amp; controls</button>
+      </nav>
+      <div class="ops-sidebar-bottom">
+        <div class="ops-profile"><span class="ops-avatar" id="staff-initials">AC</span><span><strong id="staff-name">Staff member</strong><small>Operations team</small></span><button class="ops-more" aria-label="Profile options">···</button></div>
+        <button id="logout" class="ops-signout"><span>↪</span>Sign out</button>
+      </div>
+    </aside>
+
+    <main class="ops-main">
+      <header class="ops-topbar">
+        <div class="ops-crumb"><span>Workspace</span><b>/</b><strong id="breadcrumb-current">Overview</strong></div>
+        <div class="ops-top-actions">
+          <label class="ops-search"><span aria-hidden="true">⌕</span><input class="form-control" id="global-search" type="search" placeholder="Search clients, positions, activities…" aria-label="Search current page"><kbd>⌘ K</kbd></label>
+          <button class="ops-quiet-action" id="share-access" type="button" title="Access management is not configured" aria-label="Access management is not configured">Share access <span>↗</span></button>
+          <button class="btn btn-outline-secondary btn-sm mobile-signout" id="logout-mobile" type="button">Sign out</button>
+          <span class="ops-avatar top-avatar" id="top-initials">AC</span>
+        </div>
+      </header>
+      <div class="ops-content container-fluid">
+        <div id="view-root" aria-live="polite"></div>
+        <footer class="ops-footer"><span>© <span id="year"></span> Oakstone Financial</span><span><i></i> Private operations</span></footer>
+      </div>
+    </main>
+  </div>
+  <div class="ops-toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/vendor/bootstrap.bundle.min.js"></script>
+  <script src="/brand.js"></script>
+  <script src="/dashboard.js"></script>
+</body>
+</html>

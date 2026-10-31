@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10263d">
+  <title>Contact | Oakstone Financial</title>
+  <link rel="stylesheet" href="/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/bootstrap-overrides.css">
+</head>
+<body class="contact-page">
+  <main class="contact-card card shadow-sm border-0 p-4 p-md-5">
+    <a class="contact-brand d-flex align-items-center gap-2" href="/"><span class="brand-mark">O</span><strong data-brand>Oakstone Financial</strong></a>
+    <span class="eyebrow muted">GET IN TOUCH</span>
+    <h1>Contact our team</h1>
+    <p>Send a message and our team will follow up using the email address you provide.</p>
+    <form id="contact-form">
+      <label class="form-label fw-semibold" for="contact-name">Name</label>
+      <input class="form-control" id="contact-name" name="name" autocomplete="name" maxlength="100" required>
+      <label class="form-label fw-semibold" for="contact-email">Email</label>
+      <input class="form-control" id="contact-email" name="email" type="email" autocomplete="email" maxlength="254" required>
+      <label class="form-label fw-semibold" for="contact-message">How can we help?</label>
+      <textarea class="form-control" id="contact-message" name="message" rows="6" minlength="5" maxlength="4000" required></textarea>
+      <div class="contact-honeypot" aria-hidden="true"><label for="contact-website">Website</label><input id="contact-website" name="website" tabindex="-1" autocomplete="off"></div>
+      <p id="contact-status" class="contact-status" role="status" aria-live="polite"></p>
+      <button class="btn btn-primary" type="submit">Send message <span>→</span></button>
+    </form>
+    <a class="contact-back" href="/client">Already a client? Sign in to message support</a>
+  </main>
+  <script src="/brand.js"></script>
+  <script src="/contact.js"></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#18243d">
+  <title>Staff sign in | Oakstone Financial</title>
+  <link rel="stylesheet" href="/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/bootstrap-overrides.css">
+</head>
+<body class="oak-staff-auth">
+  <main class="staff-access-shell row g-0">
+    <section class="staff-access-story col-12 col-lg-7">
+      <a class="staff-access-brand" href="/" aria-label="Oakstone Financial private operations">
+        <span class="staff-brand-mark">◉</span>
+        <span><strong>OAKSTONE</strong><small>FINANCIAL BROKER · PRIVATE OPERATIONS</small></span>
+      </a>
+      <div class="staff-access-copy">
+        <span class="staff-access-kicker">OPERATIONS ACCESS</span>
+        <h1>One ledger.<br>One source<br>of truth.</h1>
+        <p>Private access to Oakstone’s house book, client allocations, attributable pricing, and audit history.</p>
+      </div>
+      <div class="staff-access-footer">Private operations environment</div>
+    </section>
+    <section class="staff-access-panel col-12 col-lg-5">
+      <div class="staff-access-card">
+        <span class="staff-form-step">STAFF ACCESS</span>
+        <h2>Sign in</h2>
+        <p>Use your Oakstone staff credentials. Sessions are server-issued and stored in an HttpOnly cookie.</p>
+        <form id="login-form">
+          <label class="form-label" for="email">Email</label>
+          <input class="form-control" id="email" name="email" type="email" placeholder="name@company.com" autocomplete="username" required>
+          <label class="form-label" for="password">Password</label>
+          <div class="password-wrap"><input class="form-control" id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required><button type="button" id="toggle-password" aria-label="Show password">Show</button></div>
+          <div id="form-message" class="form-message" role="alert" aria-live="polite"></div>
+          <button class="staff-submit btn" type="submit"><span>Enter operations</span><span>↗</span></button>
+        </form>
+        <div class="staff-access-links"><a href="/client">Open client portfolio login <span>→</span></a></div>
+        <div class="staff-access-links"><a href="/contact.html">Contact our team <span>→</span></a></div>
+        <p class="staff-access-footnote"><i></i>No client holdings or values are created by authentication.</p>
+      </div>
+    </section>
+  </main>
+  <script src="/vendor/bootstrap.bundle.min.js"></script>
+  <script src="/brand.js"></script>
+  <script src="/login.js"></script>
+</body>
+</html>

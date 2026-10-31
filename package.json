@@ -5,6 +5,7 @@
   "description": "Oakstone Financial private operations and client access portal",
   "main": "server.js",
   "scripts": {
+    "build": "node scripts/build-frontend.js",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test"

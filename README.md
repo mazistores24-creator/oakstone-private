@@ -20,7 +20,7 @@ Bootstrap 5 is installed as a local dependency and served by the application; no
 
 ## Cloud routing
 
-The Vercel frontend proxies `/api/*` requests to the Render service through `vercel.json`, keeping browser sessions same-origin. Update the rewrite destination if the Render service hostname changes. Configure `MONGODB_URI`, `MONGODB_DB`, `SESSION_SECRET`, and any optional staff or SMTP credentials in Render's environment settings, not in source files.
+`npm run build` stages the frontend and locally installed Bootstrap assets in `dist`. Vercel deploys that static output, maps the client and dashboard paths to their HTML pages, and proxies `/api/*` to Render through `vercel.json`, keeping browser sessions same-origin. Update the Render destination if the service hostname changes. Configure `MONGODB_URI`, `MONGODB_DB`, `SESSION_SECRET`, and any optional staff or SMTP credentials in Render's environment settings, not in source files.
 
 ## Data connections
 

@@ -1,8 +1,41 @@
 {
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/:path*",
-      "destination": "https://oakstone-private.onrender.com/api/:path*"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "^/api/(.*)",
+      "dest": "https://oakstone-private.onrender.com/api/$1"
+    },
+    {
+      "src": "^/client/register$",
+      "dest": "/client-register.html"
+    },
+    {
+      "src": "^/client/portfolio$",
+      "dest": "/client.html"
+    },
+    {
+      "src": "^/client$",
+      "dest": "/client-login.html"
+    },
+    {
+      "src": "^/dashboard$",
+      "dest": "/dashboard.html"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }

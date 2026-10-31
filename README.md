@@ -18,6 +18,10 @@ Use Node.js 18 or newer and provide a MongoDB database. Set these environment va
 
 Bootstrap 5 is installed as a local dependency and served by the application; no CDN connection is needed for the responsive interface. Run `npm install` and `npm start` (use `npm.cmd` for both commands in Windows PowerShell). Run the isolated API tests with `npm test`; they use a temporary in-memory store and do not connect to MongoDB. Serve the application through HTTPS in production. Passwords must contain at least 12 characters and no more than 72 UTF-8 bytes to match bcrypt's input limit. Do not place credentials or secrets in source files.
 
+## Cloud routing
+
+The Vercel frontend proxies `/api/*` requests to the Render service through `vercel.json`, keeping browser sessions same-origin. Update the rewrite destination if the Render service hostname changes. Configure `MONGODB_URI`, `MONGODB_DB`, `SESSION_SECRET`, and any optional staff or SMTP credentials in Render's environment settings, not in source files.
+
 ## Data connections
 
 The portal reads operational records from these MongoDB collections:

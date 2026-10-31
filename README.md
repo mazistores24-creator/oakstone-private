@@ -16,7 +16,7 @@ Use Node.js 18 or newer and provide a MongoDB database. Set these environment va
 - `SMTP_FROM`: optional verified sender address; defaults to `SMTP_USER`.
 - `NODE_ENV=production`: enables secure cookies and requires MongoDB and `SESSION_SECRET`.
 
-Bootstrap 5 is installed as a local dependency and served by the application; no CDN connection is needed for the responsive interface. Run `npm install` and `npm start` (use `npm.cmd` for both commands in Windows PowerShell). Serve the application through HTTPS in production. Do not place credentials or secrets in source files.
+Bootstrap 5 is installed as a local dependency and served by the application; no CDN connection is needed for the responsive interface. Run `npm install` and `npm start` (use `npm.cmd` for both commands in Windows PowerShell). Run the isolated API tests with `npm test`; they use a temporary in-memory store and do not connect to MongoDB. Serve the application through HTTPS in production. Passwords must contain at least 12 characters and no more than 72 UTF-8 bytes to match bcrypt's input limit. Do not place credentials or secrets in source files.
 
 ## Data connections
 

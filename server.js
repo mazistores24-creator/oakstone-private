@@ -22,11 +22,16 @@ if (isProduction && !process.env.SESSION_SECRET) throw new Error('SESSION_SECRET
 if (isProduction && !process.env.MONGODB_URI) throw new Error('MONGODB_URI must be configured in production.');
 if (Boolean(process.env.STAFF_EMAIL) !== Boolean(process.env.STAFF_PASSWORD)) throw new Error('Set both STAFF_EMAIL and STAFF_PASSWORD to provision an operations user.');
 if (process.env.STAFF_PASSWORD && process.env.STAFF_PASSWORD.length < 12) throw new Error('STAFF_PASSWORD must contain at least 12 characters.');
+if (process.env.STAFF_PASSWORD && Buffer.byteLength(process.env.STAFF_PASSWORD, 'utf8') > 72) throw new Error('STAFF_PASSWORD must not exceed 72 UTF-8 bytes.');
 if (process.env.STAFF_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(process.env.STAFF_EMAIL)) throw new Error('STAFF_EMAIL must be a valid email address.');
 if (isProduction) app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '20kb' }));
 app.use(express.urlencoded({ extended: false }));
+app.use((req, _res, next) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) req.body = {};
+  next();
+});
 
 const staffSeed = process.env.STAFF_EMAIL && process.env.STAFF_PASSWORD ? { email: process.env.STAFF_EMAIL.toLowerCase(), password: process.env.STAFF_PASSWORD, role: 'staff', name: process.env.STAFF_NAME || 'Operations user' } : null;
 const memoryUsers = new Map();
@@ -79,7 +84,7 @@ async function initializeUsers() {
   const seeds = staffSeed ? [staffSeed] : [];
   if (process.env.MONGODB_URI) {
     try {
-      mongoClient = new MongoClient(process.env.MONGODB_URI);
+      mongoClient = new MongoClient(process.env.MONGODB_URI, { maxPoolSize: 10, serverSelectionTimeoutMS: 10000 });
       await mongoClient.connect();
       const database = mongoClient.db(process.env.MONGODB_DB || 'oakstone_portal');
       const collection = database.collection('users');
@@ -102,6 +107,8 @@ async function initializeUsers() {
         }
       };
       const requests = database.collection('client_requests');
+      await requests.createIndex({ email: 1, createdAt: -1 });
+      await requests.createIndex({ createdAt: -1 });
       clientRequestStore = {
         create: async (request) => { await requests.insertOne(request); return request; },
         byEmail: async (email) => requests.find({ email }).sort({ createdAt: -1 }).limit(20).toArray(),
@@ -151,7 +158,13 @@ const sessionOptions = {
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: isProduction, maxAge: 8 * 60 * 60 * 1000 }
 };
-if (process.env.MONGODB_URI) sessionOptions.store = MongoStore.create({ mongoUrl: process.env.MONGODB_URI, dbName: process.env.MONGODB_DB || 'oakstone_portal', collectionName: 'sessions', ttl: 8 * 60 * 60 });
+if (process.env.MONGODB_URI) sessionOptions.store = MongoStore.create({
+  mongoUrl: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB || 'oakstone_portal',
+  collectionName: 'sessions',
+  ttl: 8 * 60 * 60,
+  mongoOptions: { maxPoolSize: 10, serverSelectionTimeoutMS: 10000 }
+});
 app.use(session(sessionOptions));
 
 const requireRole = (role) => (req, res, next) => {
@@ -159,7 +172,17 @@ const requireRole = (role) => (req, res, next) => {
   next();
 };
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, brand: brand.name, userStore: storeMode }));
+app.get('/api/health', async (_req, res) => {
+  if (storeMode === 'mongodb') {
+    try {
+      await mongoClient.db(process.env.MONGODB_DB || 'oakstone_portal').command({ ping: 1 });
+    } catch (error) {
+      console.error('MongoDB health check failed:', error.message);
+      return res.status(503).json({ ok: false, brand: brand.name, userStore: 'unavailable' });
+    }
+  }
+  res.json({ ok: true, brand: brand.name, userStore: storeMode });
+});
 app.get('/api/session', (req, res) => res.json({ user: req.session.user || null }));
 app.post('/api/contact', async (req, res) => {
   const name = String(req.body.name || '').trim().replace(/[\r\n]/g, ' ').slice(0, 100);
@@ -208,6 +231,7 @@ app.post('/api/login/:audience', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!email || !password) return res.status(400).json({ error: 'Enter your email and password.' });
+  if (Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Password must not exceed 72 UTF-8 bytes.' });
   try {
     const user = await userStore.find(email);
       if (!user || user.role !== role || user.status === 'pending' || (role === 'client' && user.status !== 'active') || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: 'Email or password did not match.' });
@@ -225,6 +249,7 @@ app.post('/api/register/client', async (req, res) => {
   const password = String(req.body.password || '');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 12) return res.status(400).json({ error: 'Use a password with at least 12 characters.' });
+  if (Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Password must not exceed 72 UTF-8 bytes.' });
   try {
     if (await userStore.find(email)) return res.status(409).json({ error: 'An account with this email already exists.' });
     const user = { email, role: 'client', name: email.split('@')[0], clientReference: `OAK-${randomBytes(4).toString('hex').toUpperCase()}`, status: 'pending', passwordHash: await bcrypt.hash(password, 12), createdAt: new Date() };
@@ -386,6 +411,14 @@ app.post('/api/client/requests', requireRole('client'), async (req, res) => {
     console.error('Client request could not be saved:', error.message);
     res.status(500).json({ error: 'Your request could not be saved. Please try again.' });
   }
+});
+app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
+app.use((error, _req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON request body.' });
+  if (error.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large.' });
+  console.error('Request failed:', error.message);
+  res.status(500).json({ error: 'Request could not be completed.' });
 });
 app.get('/vendor/bootstrap.min.css', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules', 'bootstrap', 'dist', 'css', 'bootstrap.min.css')));
 app.get('/vendor/bootstrap.bundle.min.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules', 'bootstrap', 'dist', 'js', 'bootstrap.bundle.min.js')));

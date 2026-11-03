@@ -136,10 +136,10 @@ async function initializeUsers() {
       clientAccountStore = {
         findByEmail: async (email) => accounts.findOne({ ownerEmail: email, status: 'active', identityVerified: true }),
         listActive: async () => accounts.find({ status: 'active', identityVerified: true }).toArray(),
-        findActiveForLink: async (email, accountReference) => accounts.find({ ownerEmail: email, accountId: accountReference, status: 'active' }).limit(2).toArray(),
+        findActiveForLink: async (email, accountReference) => accounts.find({ ownerEmail: email, accountId: accountReference }).limit(2).toArray(),
         linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
           const result = await accounts.updateOne(
-            { ownerEmail: email, accountId: accountReference, status: 'active' },
+            { ownerEmail: email, accountId: accountReference },
             { $set: { status: 'active', identityVerified: true, identityVerifiedBy: verifier.email, identityVerifiedByName: verifier.name, identityVerifiedAt: verifiedAt } }
           );
           return result.matchedCount === 1;
@@ -165,7 +165,7 @@ async function initializeUsers() {
     clientAccountStore = {
       findByEmail: async (email) => memoryClientAccounts.find((account) => account.ownerEmail === email && account.status === 'active' && account.identityVerified === true) || null,
       listActive: async () => memoryClientAccounts.filter((account) => account.status === 'active' && account.identityVerified === true),
-      findActiveForLink: async (email, accountReference) => memoryClientAccounts.filter((account) => account.ownerEmail === email && account.accountId === accountReference && account.status === 'active').slice(0, 2),
+      findActiveForLink: async (email, accountReference) => memoryClientAccounts.filter((account) => account.ownerEmail === email && account.accountId === accountReference).slice(0, 2),
       linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
         const account = memoryClientAccounts.find((item) => item.ownerEmail === email && item.accountId === accountReference);
         if (!account) return false;

@@ -55,7 +55,7 @@ test('isolated API integration', async (t) => {
     SESSION_SECRET: 'test-session-secret-that-is-long-enough',
     STAFF_EMAIL: staffEmail,
     STAFF_PASSWORD: staffPassword,
-    TEST_CLIENT_ACCOUNTS: JSON.stringify([{ ownerEmail: 'client@example.test', accountId: 'ACCT-1001', name: 'Existing client', status: 'active', identityVerified: false, nav: 12345, marker: 'preserve-me' }])
+    TEST_CLIENT_ACCOUNTS: JSON.stringify([{ ownerEmail: 'client@example.test', accountId: 'ACCT-1001', name: 'Existing client', status: 'pending', identityVerified: false, nav: 12345, marker: 'preserve-me' }])
   };
   delete env.MONGODB_URI;
   delete env.SMTP_HOST;

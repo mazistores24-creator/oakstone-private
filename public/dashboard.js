@@ -55,7 +55,8 @@ function renderClients() {
     { label: 'ACCOUNT CHECK', render: (client) => `<span class="ops-status ${client.accountReady ? 'ops-status-active' : 'ops-status-review'}">${client.accountReady ? 'Linked and verified' : 'Link and verify account'}</span>` },
     { label: 'ACCESS', render: (client) => `<button class="ops-outline-button" data-action="approve-client" data-email="${escapeHtml(client.email)}" ${client.accountReady ? '' : 'disabled'}>Approve access</button>` }
   ];
-  return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}<section class="ops-card ops-list-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">CLIENT DIRECTORY</span><p>${clients.length} linked records</p></div><button class="ops-outline-button" data-action="export-clients">↓ Export</button></div>${table(clients, columns, 'No linked client accounts are available.')}</section><section class="ops-card ops-list-card pending-access-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">ACCESS REQUESTS</span><p>${pendingAccess.length} waiting for review. Approve only after identity and account checks are complete.</p></div></div>${table(pendingAccess, accessColumns, 'No client access requests are waiting for review.')}</section>`;
+  const linkForm = `<form id="staff-account-link-form" class="ops-card account-link-form"><div class="ops-card-heading"><div><span class="ops-kicker">STAFF ATTESTATION</span><h2>Link a pending client</h2></div></div><p>Match the pending registration email to an existing active account. Verify identity manually before submitting. This records staff attestation, not automated proof.</p><div class="row g-3"><div class="col-md-5"><label for="link-client-email">Pending client email</label><input class="form-control" id="link-client-email" name="email" type="email" maxlength="254" required></div><div class="col-md-4"><label for="link-account-reference">Existing account reference</label><input class="form-control" id="link-account-reference" name="accountReference" maxlength="120" required></div><div class="col-md-3 d-flex align-items-end"><button class="ops-outline-button" type="submit">Link account</button></div></div><label class="account-link-confirm"><input type="checkbox" name="identityChecked" required> I checked the client’s identity against Oakstone’s records and confirm this account belongs to them.</label></form>`;
+  return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}${linkForm}<section class="ops-card ops-list-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">CLIENT DIRECTORY</span><p>${clients.length} linked records</p></div><button class="ops-outline-button" data-action="export-clients">↓ Export</button></div>${table(clients, columns, 'No linked client accounts are available.')}</section><section class="ops-card ops-list-card pending-access-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">ACCESS REQUESTS</span><p>${pendingAccess.length} waiting for review. Approve only after identity and account checks are complete.</p></div></div>${table(pendingAccess, accessColumns, 'No client access requests are waiting for review.')}</section>`;
 }
 function renderAllocations() {
   const list = state.data.allocations.filter((item) => matchesQuery(item.client, item.mix));
@@ -198,6 +199,23 @@ document.addEventListener('click', async (event) => {
   }
 });
 document.addEventListener('submit', async (event) => {
+  const linkForm = event.target.closest('#staff-account-link-form');
+  if (linkForm) {
+    event.preventDefault();
+    const button = linkForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const email = linkForm.elements.email.value.trim();
+      const response = await fetch(`/api/staff/clients/${encodeURIComponent(email)}/link-account`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountReference: linkForm.elements.accountReference.value.trim(), identityChecked: linkForm.elements.identityChecked.checked }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Client account could not be linked.');
+      linkForm.reset();
+      toast('Staff identity attestation recorded');
+      await loadDashboard();
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+    return;
+  }
   const form = event.target.closest('#staff-support-form');
   if (!form) return;
   event.preventDefault();

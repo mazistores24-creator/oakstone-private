@@ -58,7 +58,10 @@ let clientRequestStore = {
   latest: async () => memoryClientRequests.slice(0, 6),
   countPending: async () => memoryClientRequests.filter((request) => request.status === 'Pending review').length
 };
-let clientAccountStore = { findByEmail: async () => null, listActive: async () => [] };
+const memoryClientAccounts = process.env.NODE_ENV === 'test' && process.env.TEST_CLIENT_ACCOUNTS ? JSON.parse(process.env.TEST_CLIENT_ACCOUNTS) : [];
+const memoryAccountLinkAudit = [];
+let clientAccountStore = { findByEmail: async () => null, listActive: async () => [], findActiveForLink: async () => null, linkVerifiedAccount: async () => false };
+let accountLinkAuditStore = { record: async (event) => { memoryAccountLinkAudit.push(event); } };
 let houseBookStore = { list: async () => [] };
 let priceStore = { list: async () => [] };
 let userStore = {
@@ -132,8 +135,19 @@ async function initializeUsers() {
       const accounts = database.collection('client_accounts');
       clientAccountStore = {
         findByEmail: async (email) => accounts.findOne({ ownerEmail: email, status: 'active', identityVerified: true }),
-        listActive: async () => accounts.find({ status: 'active', identityVerified: true }).toArray()
+        listActive: async () => accounts.find({ status: 'active', identityVerified: true }).toArray(),
+        findActiveForLink: async (email, accountReference) => accounts.find({ ownerEmail: email, accountId: accountReference, status: 'active' }).limit(2).toArray(),
+        linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
+          const result = await accounts.updateOne(
+            { ownerEmail: email, accountId: accountReference, status: 'active' },
+            { $set: { status: 'active', identityVerified: true, identityVerifiedBy: verifier.email, identityVerifiedByName: verifier.name, identityVerifiedAt: verifiedAt } }
+          );
+          return result.matchedCount === 1;
+        }
       };
+      const accountLinkAudit = database.collection('account_link_audit');
+      await accountLinkAudit.createIndex({ targetEmail: 1, createdAt: -1 });
+      accountLinkAuditStore = { record: async (event) => { await accountLinkAudit.insertOne(event); } };
       const houseBook = database.collection('house_book');
       houseBookStore = { list: async () => houseBook.find({}).sort({ createdAt: -1 }).limit(100).toArray() };
       const prices = database.collection('market_prices');
@@ -148,6 +162,17 @@ async function initializeUsers() {
   }
   if (storeMode === 'memory') {
     for (const seed of seeds) memoryUsers.set(seed.email, { email: seed.email, role: seed.role, name: seed.name, clientReference: seed.role === 'client' ? 'OAK-CLIENT-0001' : undefined, passwordHash: await bcrypt.hash(seed.password, 12) });
+    clientAccountStore = {
+      findByEmail: async (email) => memoryClientAccounts.find((account) => account.ownerEmail === email && account.status === 'active' && account.identityVerified === true) || null,
+      listActive: async () => memoryClientAccounts.filter((account) => account.status === 'active' && account.identityVerified === true),
+      findActiveForLink: async (email, accountReference) => memoryClientAccounts.filter((account) => account.ownerEmail === email && account.accountId === accountReference && account.status === 'active').slice(0, 2),
+      linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
+        const account = memoryClientAccounts.find((item) => item.ownerEmail === email && item.accountId === accountReference);
+        if (!account) return false;
+        Object.assign(account, { status: 'active', identityVerified: true, identityVerifiedBy: verifier.email, identityVerifiedByName: verifier.name, identityVerifiedAt: verifiedAt });
+        return true;
+      }
+    };
   }
 }
 
@@ -326,6 +351,27 @@ app.post('/api/staff/clients/:email/approve', requireRole('staff'), async (req, 
   } catch (error) {
     console.error('Client access approval failed:', error.message);
     res.status(500).json({ error: 'Client access could not be approved.' });
+  }
+});
+app.post('/api/staff/clients/:email/link-account', requireRole('staff'), async (req, res) => {
+  const emailInput = String(req.params.email || '').trim();
+  const email = emailInput.toLowerCase();
+  const accountReference = typeof req.body.accountReference === 'string' ? req.body.accountReference.trim() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput) || !accountReference || accountReference.length > 120 || /[\r\n]/.test(accountReference)) return res.status(400).json({ error: 'Enter a valid client email and account reference.' });
+  if (req.body.identityChecked !== true) return res.status(400).json({ error: 'Confirm that staff checked the client identity before linking.' });
+  try {
+    const user = await userStore.find(email);
+    if (!user || user.role !== 'client' || user.status !== 'pending') return res.status(404).json({ error: 'Pending client access was not found.' });
+    const matchingAccounts = await clientAccountStore.findActiveForLink(email, accountReference);
+    if (matchingAccounts.length !== 1) return res.status(404).json({ error: 'No unique active account matches this exact email and account reference.' });
+    const verifiedAt = new Date();
+    const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
+    if (!(await clientAccountStore.linkVerifiedAccount({ email, accountReference, verifier, verifiedAt }))) return res.status(409).json({ error: 'The matching account could not be updated.' });
+    await accountLinkAuditStore.record({ action: 'client_account_identity_attested', targetEmail: email, accountReference, verifierEmail: verifier.email, verifierName: verifier.name, identityChecked: true, verificationMethod: 'staff_attestation', createdAt: verifiedAt });
+    return res.json({ ok: true, identityVerified: true, verificationMethod: 'staff_attestation', verifiedAt });
+  } catch (error) {
+    console.error('Client account link failed:', error.message);
+    return res.status(500).json({ error: 'Client account could not be linked.' });
   }
 });
 app.get('/api/staff/support/threads', requireRole('staff'), async (_req, res) => {

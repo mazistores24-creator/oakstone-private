@@ -55,7 +55,7 @@ test('isolated API integration', async (t) => {
     SESSION_SECRET: 'test-session-secret-that-is-long-enough',
     STAFF_EMAIL: staffEmail,
     STAFF_PASSWORD: staffPassword,
-    TEST_CLIENT_ACCOUNTS: JSON.stringify([{ ownerEmail: 'client@example.test', accountId: 'ACCT-1001', name: 'Existing client', status: 'pending', identityVerified: false, nav: 12345, marker: 'preserve-me' }])
+    TEST_CLIENT_ACCOUNTS: JSON.stringify([{ ownerEmail: 'client@example.test', accountId: 'ACCT-1001', clientReference: 'OAK-EC7752D7', name: 'Existing client', status: 'pending', identityVerified: false, nav: 12345, marker: 'preserve-me' }])
   };
   delete env.MONGODB_URI;
   delete env.SMTP_HOST;
@@ -146,7 +146,7 @@ test('isolated API integration', async (t) => {
 
     await t.test('role protection and client-only endpoints', async () => {
       assert.equal((await request('/api/session')).body.user, null);
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
       for (const pathname of [
         '/api/staff/overview',
         '/api/staff/support/threads',
@@ -202,10 +202,10 @@ test('isolated API integration', async (t) => {
         message: 'This client is not active.'
       })).response.status, 404);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/approve', {})).response.status, 409);
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: false })).response.status, 400, 'explicit staff attestation is required');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: false })).response.status, 400, 'explicit staff attestation is required');
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'wrong-reference', identityChecked: true })).response.status, 404, 'account reference must exactly match');
-      assert.equal((await jsonRequest('/api/staff/clients/other%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: true })).response.status, 404, 'owner email must match exactly');
-      const linked = await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: true });
+      assert.equal((await jsonRequest('/api/staff/clients/other%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 404, 'owner email must match exactly');
+      const linked = await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true });
       assert.equal(linked.response.status, 200);
       assert.equal(linked.body.verificationMethod, 'staff_attestation');
       assert.ok(linked.body.verifiedAt);
@@ -220,7 +220,7 @@ test('isolated API integration', async (t) => {
       assert.equal(linkedPortfolio.body.accountLinked, true, 'verified account is available after approval');
       assert.equal(linkedPortfolio.body.accountId, 'ACCT-1001');
       assert.equal(linkedPortfolio.body.nav, 12345, 'linking preserves unrelated account data');
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: true })).response.status, 401, 'clients cannot invoke staff linking route');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'clients cannot invoke staff linking route');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       assert.equal((await jsonRequest('/api/staff/support/client%40example.test/messages', {
@@ -233,7 +233,7 @@ test('isolated API integration', async (t) => {
       assert.equal(logout.response.status, 200);
       assert.equal(logout.body.ok, true);
       assert.equal((await request('/api/session')).body.user, null);
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'ACCT-1001', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
       assert.equal((await request('/api/staff/overview')).response.status, 401);
     });
   } finally {

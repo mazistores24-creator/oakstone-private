@@ -43,8 +43,9 @@ function renderHouseBook() {
   return `${pageHeading('OPERATIONS / HOUSE BOOK', 'House book', 'Review posted activity from the connected account ledger.', '<button class="ops-outline-button" data-action="export-ledger">↓ Export</button>')}<section class="ops-card ops-list-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">HOUSE BOOK ENTRIES</span><p>${state.data.ledger.length} entries available</p></div></div>${ledgerTable(rows)}</section>`;
 }
 function renderClients() {
-  const clients = state.data.clients.filter((client) => matchesQuery(client.name, client.type, client.status));
-  const pendingAccess = (state.data.pendingAccess || []).filter((client) => matchesQuery(client.email, client.clientReference));
+  if (!state.data) return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}<section class="ops-card ops-data-empty" role="status"><strong>Loading client data</strong><span>The client directory will appear when the dashboard data finishes loading.</span></section>`;
+  const clients = (Array.isArray(state.data.clients) ? state.data.clients : []).filter((client) => matchesQuery(client.name, client.type, client.status));
+  const pendingAccess = (Array.isArray(state.data.pendingAccess) ? state.data.pendingAccess : []).filter((client) => matchesQuery(client.email, client.clientReference));
   const columns = [
     { label: 'CLIENT / ACCOUNT', render: (client) => `<span class="ops-client-name"><i>${escapeHtml(client.code)}</i><strong>${escapeHtml(client.name)}</strong></span>` },
     { label: 'MANDATE', key: 'type' }, { label: 'HOUSE BOOK', render: (client) => `<span class="ops-amount">${escapeHtml(client.value)}</span>` },

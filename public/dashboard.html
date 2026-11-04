@@ -55,13 +55,14 @@
     <form id="deposit-approval-form" method="dialog">
       <button class="ops-dialog-close" type="button" id="close-deposit-approval" aria-label="Close">×</button>
       <span class="ops-kicker">CUSTODIAN SETTLEMENT</span>
-      <h2 id="deposit-approval-title">Approve cleared deposit</h2>
-      <p>Approval adds this deposit to both NAV and available cash. Confirm settlement with the custodian first.</p>
+      <h2 id="deposit-approval-title">Settle request</h2>
+      <p id="settlement-impact"></p>
       <input type="hidden" name="reference">
+      <input type="hidden" name="type">
       <label for="deposit-settlement-reference">Custodian settlement reference</label>
       <input class="form-control" id="deposit-settlement-reference" name="settlementReference" maxlength="200" required>
-      <label class="account-link-confirm"><input type="checkbox" name="custodianCleared" required> I confirmed the custodian shows these funds as cleared.</label>
-      <button class="ops-primary btn btn-primary" type="submit">Approve deposit and update balances</button>
+      <label class="account-link-confirm"><input type="checkbox" name="custodianCleared" required> I confirmed the custodian shows this transaction as settled.</label>
+      <button class="ops-primary btn btn-primary" type="submit">Confirm settlement and update balance</button>
     </form>
   </dialog>
   <div class="ops-toast" id="toast" role="status" aria-live="polite"></div>

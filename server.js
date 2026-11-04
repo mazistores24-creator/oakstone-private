@@ -20,22 +20,39 @@ const investmentTiers = {
   gold: { label: 'Gold', min: 150000, max: 499999 },
   diamond: { label: 'Diamond', min: 500000, max: 1000000 }
 };
-function calculateDepositBalances(account, depositAmount) {
-  if (Array.isArray(account.holdings) && account.holdings.length && (account.nav === null || account.nav === undefined || account.cash === null || account.cash === undefined)) return null;
+function calculateSettledBalances(account, request) {
   const toCents = (value) => {
-    const amount = value === null || value === undefined ? 0 : Number(value);
+    const amount = Number(value);
     if (!Number.isFinite(amount) || amount < 0) return null;
     const cents = Math.round((amount + Number.EPSILON) * 100);
     return Number.isSafeInteger(cents) ? cents : null;
   };
-  const navCents = toCents(account.nav);
-  const cashCents = toCents(account.cash);
-  const depositCents = toCents(depositAmount);
-  if (navCents === null || cashCents === null || depositCents === null || depositCents <= 0) return null;
-  const updatedNavCents = navCents + depositCents;
-  const updatedCashCents = cashCents + depositCents;
-  if (!Number.isSafeInteger(updatedNavCents) || !Number.isSafeInteger(updatedCashCents)) return null;
-  return { nav: updatedNavCents / 100, cash: updatedCashCents / 100 };
+  const amountCents = toCents(request.amount);
+  if (amountCents === null || amountCents === 0) return { kind: 'balance-baseline-required' };
+  const navMissing = account.nav === null || account.nav === undefined;
+  const cashMissing = account.cash === null || account.cash === undefined;
+  if ((request.type !== 'deposit' && (navMissing || cashMissing)) || (request.type === 'deposit' && Array.isArray(account.holdings) && account.holdings.length && (navMissing || cashMissing))) return { kind: 'balance-baseline-required' };
+  const navCents = navMissing ? 0 : toCents(account.nav);
+  const cashCents = cashMissing ? 0 : toCents(account.cash);
+  if (navCents === null || cashCents === null) return { kind: 'balance-baseline-required' };
+  let updatedNavCents = navCents;
+  let updatedCashCents = cashCents;
+  if (request.type === 'deposit') {
+    updatedNavCents += amountCents;
+    updatedCashCents += amountCents;
+  } else if (request.type === 'withdraw') {
+    if (amountCents > navCents || amountCents > cashCents) return { kind: 'insufficient-balance' };
+    updatedNavCents -= amountCents;
+    updatedCashCents -= amountCents;
+  } else if (request.type === 'invest') {
+    if ((account.currency || 'USD') !== 'USD') return { kind: 'currency-not-supported' };
+    if (amountCents > cashCents) return { kind: 'insufficient-balance' };
+    updatedCashCents -= amountCents;
+  } else {
+    return { kind: 'unsupported-request' };
+  }
+  if (!Number.isSafeInteger(updatedNavCents) || !Number.isSafeInteger(updatedCashCents)) return { kind: 'balance-baseline-required' };
+  return { kind: 'ok', nav: updatedNavCents / 100, cash: updatedCashCents / 100 };
 }
 if (isProduction && !process.env.SESSION_SECRET) throw new Error('SESSION_SECRET must be configured in production.');
 if (isProduction && !process.env.MONGODB_URI) throw new Error('MONGODB_URI must be configured in production.');
@@ -81,7 +98,7 @@ const memoryClientAccounts = process.env.NODE_ENV === 'test' && process.env.TEST
 const memoryAccountLinkAudit = [];
 const memoryClientRequestAudit = [];
 let clientAccountStore = { findByEmail: async () => null, listActive: async () => [], findActiveForLink: async () => null, linkVerifiedAccount: async () => false, createVerifiedAccount: async () => false, updatePortfolioData: async () => false };
-let depositApprovalStore = { approve: async () => ({ kind: 'unavailable' }) };
+let settlementApprovalStore = { approve: async () => ({ kind: 'unavailable' }) };
 let accountLinkAuditStore = { record: async (event) => { memoryAccountLinkAudit.push(event); } };
 let houseBookStore = { list: async () => [] };
 let priceStore = { list: async () => [] };
@@ -207,21 +224,21 @@ async function initializeUsers() {
           return result.matchedCount === 1;
         }
       };
-      depositApprovalStore = {
+      settlementApprovalStore = {
         approve: async ({ reference, settlementReference, verifier, approvedAt }) => {
           const session = mongoClient.startSession();
           let outcome = null;
           try {
             await session.withTransaction(async () => {
               outcome = null;
-              const deposit = await requests.findOne({ reference, type: 'deposit', status: 'Pending review' }, { session });
-              if (!deposit) {
+              const request = await requests.findOne({ reference, type: { $in: ['deposit', 'withdraw', 'invest'] }, status: 'Pending review' }, { session });
+              if (!request) {
                 outcome = { kind: 'not-pending' };
                 return;
               }
               const account = await accounts.findOne({
-                ownerEmail: deposit.email,
-                clientReference: deposit.clientReference,
+                ownerEmail: request.email,
+                clientReference: request.clientReference,
                 status: 'active',
                 identityVerified: true
               }, { session });
@@ -229,44 +246,46 @@ async function initializeUsers() {
                 outcome = { kind: 'account-not-found' };
                 return;
               }
-              const balances = calculateDepositBalances(account, Number(deposit.amount));
-              if (!balances) {
-                outcome = { kind: 'balance-baseline-required' };
+              const balances = calculateSettledBalances(account, request);
+              if (balances.kind !== 'ok') {
+                outcome = { kind: balances.kind };
                 return;
               }
               const accountUpdate = await accounts.updateOne(
-                { _id: account._id, ownerEmail: deposit.email, clientReference: deposit.clientReference, status: 'active', identityVerified: true },
+                { _id: account._id, ownerEmail: request.email, clientReference: request.clientReference, status: 'active', identityVerified: true },
                 { $set: {
                   nav: balances.nav,
                   cash: balances.cash,
-                  depositUpdatedAt: approvedAt,
-                  depositUpdatedBy: verifier.email,
-                  depositUpdatedByName: verifier.name,
-                  depositSettlementReference: settlementReference
+                  settlementUpdatedAt: approvedAt,
+                  settlementUpdatedBy: verifier.email,
+                  settlementUpdatedByName: verifier.name,
+                  lastSettlementReference: settlementReference
                 } },
                 { session }
               );
               if (accountUpdate.matchedCount !== 1) throw new Error('Verified account changed during deposit approval.');
               const requestUpdate = await requests.updateOne(
-                { _id: deposit._id, status: 'Pending review' },
+                { _id: request._id, status: 'Pending review' },
                 { $set: {
                   status: 'Approved',
                   approvedAt,
                   approvedBy: verifier.email,
                   approvedByName: verifier.name,
-                  settlementReference
+                  settlementReference,
+                  settledAmount: Number(request.amount)
                 } },
                 { session }
               );
               if (requestUpdate.modifiedCount !== 1) throw new Error('Deposit request changed during approval.');
               await requestAudit.insertOne({
                 requestReference: reference,
-                action: 'deposit_approved',
-                email: deposit.email,
-                accountReference: deposit.clientReference,
-                accountId: deposit.accountId,
-                amount: Number(deposit.amount),
-                currency: deposit.currency,
+                action: `${request.type}_settled`,
+                requestType: request.type,
+                email: request.email,
+                accountReference: request.clientReference,
+                accountId: request.accountId,
+                amount: Number(request.amount),
+                currency: request.currency,
                 settlementReference,
                 previousNav: account.nav ?? null,
                 previousCash: account.cash ?? null,
@@ -276,7 +295,7 @@ async function initializeUsers() {
                 verifierName: verifier.name,
                 createdAt: approvedAt
               }, { session });
-              outcome = { kind: 'approved', nav: balances.nav, cash: balances.cash, currency: deposit.currency, accountId: deposit.accountId };
+              outcome = { kind: 'approved', requestType: request.type, nav: balances.nav, cash: balances.cash, currency: request.currency, accountId: request.accountId };
             });
             return outcome;
           } finally {
@@ -330,39 +349,42 @@ async function initializeUsers() {
         return true;
       }
     };
-    depositApprovalStore = {
+    settlementApprovalStore = {
       approve: async ({ reference, settlementReference, verifier, approvedAt }) => {
-        const deposit = memoryClientRequests.find((request) => request.reference === reference && request.type === 'deposit' && request.status === 'Pending review');
-        if (!deposit) return { kind: 'not-pending' };
-        const accounts = memoryClientAccounts.filter((account) => account.ownerEmail === deposit.email && account.clientReference === deposit.clientReference && account.status === 'active' && account.identityVerified === true);
+        const request = memoryClientRequests.find((item) => item.reference === reference && ['deposit', 'withdraw', 'invest'].includes(item.type) && item.status === 'Pending review');
+        if (!request) return { kind: 'not-pending' };
+        const accounts = memoryClientAccounts.filter((account) => account.ownerEmail === request.email && account.clientReference === request.clientReference && account.status === 'active' && account.identityVerified === true);
         if (accounts.length !== 1) return { kind: 'account-not-found' };
         const account = accounts[0];
         const previousNav = account.nav ?? null;
         const previousCash = account.cash ?? null;
-        const balances = calculateDepositBalances(account, Number(deposit.amount));
-        if (!balances) return { kind: 'balance-baseline-required' };
+        const balances = calculateSettledBalances(account, request);
+        if (balances.kind !== 'ok') return balances;
         Object.assign(account, {
-          ...balances,
-          depositUpdatedAt: approvedAt,
-          depositUpdatedBy: verifier.email,
-          depositUpdatedByName: verifier.name,
-          depositSettlementReference: settlementReference
+          nav: balances.nav,
+          cash: balances.cash,
+          settlementUpdatedAt: approvedAt,
+          settlementUpdatedBy: verifier.email,
+          settlementUpdatedByName: verifier.name,
+          lastSettlementReference: settlementReference
         });
-        Object.assign(deposit, {
+        Object.assign(request, {
           status: 'Approved',
           approvedAt,
           approvedBy: verifier.email,
           approvedByName: verifier.name,
-          settlementReference
+          settlementReference,
+          settledAmount: Number(request.amount)
         });
         memoryClientRequestAudit.unshift({
           requestReference: reference,
-          action: 'deposit_approved',
-          email: deposit.email,
-          accountReference: deposit.clientReference,
-          accountId: deposit.accountId,
-          amount: Number(deposit.amount),
-          currency: deposit.currency,
+          action: `${request.type}_settled`,
+          requestType: request.type,
+          email: request.email,
+          accountReference: request.clientReference,
+          accountId: request.accountId,
+          amount: Number(request.amount),
+          currency: request.currency,
           settlementReference,
           previousNav,
           previousCash,
@@ -372,7 +394,7 @@ async function initializeUsers() {
           verifierName: verifier.name,
           createdAt: approvedAt
         });
-        return { kind: 'approved', nav: balances.nav, cash: balances.cash, currency: deposit.currency, accountId: deposit.accountId };
+        return { kind: 'approved', requestType: request.type, nav: balances.nav, cash: balances.cash, currency: request.currency, accountId: request.accountId };
       }
     };
   }
@@ -535,14 +557,14 @@ app.get('/api/staff/overview', requireRole('staff'), async (_req, res) => {
         { label: 'Net asset value', value: totalNav === null || currencies.size > 1 ? '—' : formatMoney(totalNav), change: `${accounts.length} linked account${accounts.length === 1 ? '' : 's'}`, icon: '◈' },
         { label: 'Active client accounts', value: String(accounts.length), change: 'Verified account links', icon: '◎' },
         { label: 'Cash available', value: accounts.length && currencies.size === 1 && accounts.every((account) => account.cash !== null && account.cash !== undefined && Number.isFinite(Number(account.cash))) ? formatMoney(accounts.reduce((total, account) => total + Number(account.cash), 0)) : '—', change: 'Account feed', icon: '◌' },
-        { label: 'Open requests', value: String(openRequestCount), change: 'Awaiting review', icon: '⌁' }
+        { label: 'Open requests', value: String(openRequestCount), change: 'Withdrawal, deposit and investment requests awaiting review', icon: '⌁' }
       ],
       clients,
       pendingAccess,
       ledger: ledgerEntries.map((entry) => ({ date: entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—', ref: entry.reference || entry.ref || '—', account: entry.accountName || entry.clientReference || '—', description: entry.description || entry.type || '—', amount: formatMoney(entry.amount, entry.currency || currency), status: entry.status || 'Recorded' })),
       allocations,
       pricing: prices.map((price) => ({ ticker: price.symbol, name: price.name || price.description || '', price: String(price.price ?? '—'), move: String(price.change ?? '—'), up: Number(price.change) >= 0 })),
-      audit: recentRequests.map((request) => ({ reference: request.reference, email: request.email, createdAt: request.createdAt, status: request.status, type: request.type, initials: request.type === 'withdraw' ? 'WD' : request.type === 'deposit' ? 'DP' : 'IN', person: request.email, action: `submitted a ${request.type === 'withdraw' ? 'withdrawal' : request.type === 'deposit' ? 'deposit' : 'investment'} request`, context: `${request.accountId || request.clientReference || 'Account reference pending'} · ${formatMoney(request.amount, request.currency || currency)}${request.tier && investmentTiers[request.tier] ? ` · ${investmentTiers[request.tier].label}` : ''}`, time: new Date(request.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }))
+      audit: recentRequests.map((request) => ({ reference: request.reference, email: request.email, createdAt: request.createdAt, status: request.status, type: request.type, amount: request.amount, currency: request.currency || currency, tier: request.tier || null, initials: request.type === 'withdraw' ? 'WD' : request.type === 'deposit' ? 'DP' : 'IN', person: request.email, action: `submitted a ${request.type === 'withdraw' ? 'withdrawal' : request.type === 'deposit' ? 'deposit' : 'investment'} request`, context: `${request.accountId || request.clientReference || 'Account reference pending'} · ${formatMoney(request.amount, request.currency || currency)}${request.tier && investmentTiers[request.tier] ? ` · ${investmentTiers[request.tier].label}` : ''}`, time: new Date(request.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }))
     });
   } catch (error) {
     console.error('Staff overview failed:', error.message);
@@ -733,7 +755,9 @@ app.post('/api/client/requests', requireRole('client'), async (req, res) => {
     if (!account) return res.status(409).json({ error: 'Link and verify an account before submitting a transaction request.' });
     if (type === 'invest' && (account.currency || 'USD') !== 'USD') return res.status(409).json({ error: 'Investment tiers are denominated in USD and are available only for USD-linked accounts.' });
     if (type === 'withdraw' && (account.cash === null || account.cash === undefined || !Number.isFinite(Number(account.cash)))) return res.status(409).json({ error: 'The available cash balance is not on file for this account.' });
+    if (type === 'invest' && (account.cash === null || account.cash === undefined || !Number.isFinite(Number(account.cash)))) return res.status(409).json({ error: 'The available cash balance is not on file for this account.' });
     if (type === 'withdraw' && amount > Number(account.cash)) return res.status(400).json({ error: 'The request exceeds the available account cash.' });
+    if (type === 'invest' && amount > Number(account.cash)) return res.status(400).json({ error: 'The investment request exceeds the available account cash.' });
     const request = { reference: `REQ-${randomBytes(4).toString('hex').toUpperCase()}`, email: req.session.user.email, name: req.session.user.name, clientReference: account.clientReference || req.session.user.clientReference || null, accountId: account.accountId || req.session.user.clientReference || null, accountName: account.name || 'Investment account', currency: account.currency || 'USD', type, ...(tier ? { tier: tierId } : {}), amount: amount.toFixed(2), note, status: 'Pending review', createdAt };
     await clientRequestStore.create(request);
     res.status(201).json({ request: { reference: request.reference, account: request.accountName, accountId: request.accountId, currency: request.currency, type: request.type, tier: request.tier || null, amount: request.amount, note: request.note, status: request.status, createdAt: request.createdAt.toISOString() } });
@@ -742,22 +766,24 @@ app.post('/api/client/requests', requireRole('client'), async (req, res) => {
     res.status(500).json({ error: 'Your request could not be saved. Please try again.' });
   }
 });
-app.post('/api/staff/requests/:reference/approve-deposit', requireRole('staff'), async (req, res) => {
+app.post('/api/staff/requests/:reference/approve-settled', requireRole('staff'), async (req, res) => {
   const reference = String(req.params.reference || '').trim();
   const settlementReference = typeof req.body.settlementReference === 'string' ? req.body.settlementReference.trim() : '';
-  if (!reference || reference.length > 120 || !settlementReference || settlementReference.length > 200 || /[\r\n]/.test(settlementReference)) return res.status(400).json({ error: 'Enter the deposit request reference and custodian settlement reference.' });
-  if (req.body.custodianCleared !== true) return res.status(400).json({ error: 'Confirm that the custodian shows the deposit as cleared.' });
+  if (!reference || reference.length > 120 || !settlementReference || settlementReference.length > 200 || /[\r\n]/.test(settlementReference)) return res.status(400).json({ error: 'Enter the request reference and custodian settlement reference.' });
+  if (req.body.custodianCleared !== true) return res.status(400).json({ error: 'Confirm that the custodian shows this transaction as settled.' });
   try {
     const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
-    const result = await depositApprovalStore.approve({ reference, settlementReference, verifier, approvedAt: new Date() });
-    if (result.kind === 'not-pending') return res.status(409).json({ error: 'This deposit request is not pending or has already been processed.' });
-    if (result.kind === 'account-not-found') return res.status(409).json({ error: 'The verified linked account for this deposit request could not be found.' });
-    if (result.kind === 'balance-baseline-required') return res.status(409).json({ error: 'Record verified starting balances before approving a deposit for an account with holdings.' });
-    if (result.kind !== 'approved') return res.status(500).json({ error: 'The deposit could not be approved.' });
-    return res.json({ ok: true, requestReference: reference, accountId: result.accountId, nav: result.nav, cash: result.cash, currency: result.currency });
+    const result = await settlementApprovalStore.approve({ reference, settlementReference, verifier, approvedAt: new Date() });
+    if (result.kind === 'not-pending') return res.status(409).json({ error: 'This request is not pending or has already been processed.' });
+    if (result.kind === 'account-not-found') return res.status(409).json({ error: 'The verified linked account for this request could not be found.' });
+    if (result.kind === 'balance-baseline-required') return res.status(409).json({ error: 'Record verified starting NAV and cash before settling this request.' });
+    if (result.kind === 'insufficient-balance') return res.status(409).json({ error: 'The current account balances cannot cover this settled amount.' });
+    if (result.kind === 'currency-not-supported') return res.status(409).json({ error: 'Investment settlement is available only for USD-linked accounts.' });
+    if (result.kind !== 'approved') return res.status(500).json({ error: 'The request could not be settled.' });
+    return res.json({ ok: true, requestReference: reference, requestType: result.requestType, accountId: result.accountId, nav: result.nav, cash: result.cash, currency: result.currency });
   } catch (error) {
-    console.error('Deposit approval failed:', error.message);
-    return res.status(500).json({ error: 'The deposit could not be approved.' });
+    console.error('Request settlement failed:', error.message);
+    return res.status(500).json({ error: 'The request could not be settled.' });
   }
 });
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));

@@ -148,7 +148,7 @@ test('isolated API integration', async (t) => {
       assert.equal((await request('/api/session')).body.user, null);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/create-account', { accountReference: 'OAK-NEW1001', accountId: 'ACCT-2002', identityChecked: true })).response.status, 401, 'create-account route requires staff authentication');
-      assert.equal((await jsonRequest('/api/staff/requests/REQ-TEST1001/approve-deposit', { settlementReference: 'CUST-TEST1001', custodianCleared: true })).response.status, 401, 'deposit approval requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/requests/REQ-TEST1001/approve-settled', { settlementReference: 'CUST-TEST1001', custodianCleared: true })).response.status, 401, 'settlement approval requires staff authentication');
       for (const pathname of [
         '/api/staff/overview',
         '/api/staff/support/threads',
@@ -231,10 +231,10 @@ test('isolated API integration', async (t) => {
       assert.equal(setupAccess.accountId, createdAccount.body.accountId, 'access requests include the generated account ID');
       const missingDataAttestation = await jsonRequest('/api/staff/clients/setup-client%40example.test/portfolio-data', { accountReference: 'OAK-SETUP1001', nav: 15000, cash: 3500, sourceReference: 'statement-2026-11-04', dataChecked: false });
       assert.equal(missingDataAttestation.response.status, 400, 'balance updates require staff source attestation');
-      const savedPortfolioData = await jsonRequest('/api/staff/clients/setup-client%40example.test/portfolio-data', { accountReference: 'OAK-SETUP1001', nav: 15000.75, cash: 3500.25, sourceReference: 'statement-2026-11-04', dataChecked: true });
+      const savedPortfolioData = await jsonRequest('/api/staff/clients/setup-client%40example.test/portfolio-data', { accountReference: 'OAK-SETUP1001', nav: 15000.75, cash: 6500.25, sourceReference: 'statement-2026-11-04', dataChecked: true });
       assert.equal(savedPortfolioData.response.status, 200);
       assert.equal(savedPortfolioData.body.nav, 15000.75);
-      assert.equal(savedPortfolioData.body.cash, 3500.25);
+      assert.equal(savedPortfolioData.body.cash, 6500.25);
       const duplicateAccount = await jsonRequest('/api/staff/clients/setup-client%40example.test/create-account', { accountReference: 'OAK-SETUP1001', currency: 'USD', identityChecked: true });
       assert.equal(duplicateAccount.response.status, 409, 'duplicate account identifiers are rejected');
       const setupApproval = await jsonRequest('/api/staff/clients/setup-client%40example.test/approve', { identityChecked: true });
@@ -246,12 +246,12 @@ test('isolated API integration', async (t) => {
       assert.equal(setupPortfolio.response.status, 200);
       assert.equal(setupPortfolio.body.accountLinked, true);
       assert.equal(setupPortfolio.body.nav, 15000.75, 'staff-recorded NAV appears in the client portfolio');
-      assert.equal(setupPortfolio.body.cash, 3500.25, 'staff-recorded cash appears in the client portfolio');
+      assert.equal(setupPortfolio.body.cash, 6500.25, 'staff-recorded cash appears in the client portfolio');
       assert.equal((await jsonRequest('/api/client/requests', { type: 'withdraw', amount: 1 })).response.status, 201, 'withdrawal requests use the recorded cash balance');
       const depositRequest = await jsonRequest('/api/client/requests', { type: 'deposit', amount: 125.75, note: 'Custodian deposit test' });
       assert.equal(depositRequest.response.status, 201);
       assert.equal(depositRequest.body.request.status, 'Pending review');
-      assert.equal((await request('/api/client/portfolio')).body.cash, 3500.25, 'request submission does not change balances');
+      assert.equal((await request('/api/client/portfolio')).body.cash, 6500.25, 'request submission does not change balances');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       const pendingDepositOverview = await request('/api/staff/overview');
@@ -259,15 +259,15 @@ test('isolated API integration', async (t) => {
       assert.equal(pendingDepositEvent.type, 'deposit');
       assert.equal(pendingDepositEvent.status, 'Pending review');
       assert.equal(pendingDepositEvent.email, 'setup-client@example.test');
-      const missingSettlementRef = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { custodianCleared: true });
+      const missingSettlementRef = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-settled`, { custodianCleared: true });
       assert.equal(missingSettlementRef.response.status, 400, 'approval requires a custodian settlement reference');
-      const missingCustodianConfirmation = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: false });
+      const missingCustodianConfirmation = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-settled`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: false });
       assert.equal(missingCustodianConfirmation.response.status, 400, 'approval requires staff confirmation of custodian clearance');
-      const depositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
+      const depositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-settled`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
       assert.equal(depositApproval.response.status, 200);
       assert.equal(depositApproval.body.nav, 15126.5);
-      assert.equal(depositApproval.body.cash, 3626);
-      const duplicateDepositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
+      assert.equal(depositApproval.body.cash, 6626);
+      const duplicateDepositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-settled`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
       assert.equal(duplicateDepositApproval.response.status, 409, 'a deposit can only be credited once');
       const approvedDepositOverview = await request('/api/staff/overview');
       const approvedDepositEvent = approvedDepositOverview.body.audit.find((event) => event.reference === depositRequest.body.request.reference);
@@ -276,7 +276,28 @@ test('isolated API integration', async (t) => {
       assert.equal((await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' })).response.status, 200);
       const afterDeposit = await request('/api/client/portfolio');
       assert.equal(afterDeposit.body.nav, 15126.5);
-      assert.equal(afterDeposit.body.cash, 3626);
+      assert.equal(afterDeposit.body.cash, 6626);
+      assert.equal((await jsonRequest('/api/client/requests', { type: 'invest', amount: 7000, tier: 'bronze' })).response.status, 400, 'investment requests cannot exceed available cash');
+      const settledWithdrawal = await jsonRequest('/api/client/requests', { type: 'withdraw', amount: 1000 });
+      assert.equal(settledWithdrawal.response.status, 201);
+      const settledInvestment = await jsonRequest('/api/client/requests', { type: 'invest', amount: 5000, tier: 'bronze' });
+      assert.equal(settledInvestment.response.status, 201);
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
+      const withdrawalSettlement = await jsonRequest(`/api/staff/requests/${settledWithdrawal.body.request.reference}/approve-settled`, { settlementReference: 'CUST-WITHDRAW-1001', custodianCleared: true });
+      assert.equal(withdrawalSettlement.response.status, 200);
+      assert.equal(withdrawalSettlement.body.nav, 14126.5);
+      assert.equal(withdrawalSettlement.body.cash, 5626);
+      const investmentSettlement = await jsonRequest(`/api/staff/requests/${settledInvestment.body.request.reference}/approve-settled`, { settlementReference: 'CUST-INVEST-1001', custodianCleared: true });
+      assert.equal(investmentSettlement.response.status, 200);
+      assert.equal(investmentSettlement.body.nav, 14126.5, 'investment settlement preserves NAV as cash converts to holdings');
+      assert.equal(investmentSettlement.body.cash, 626);
+      assert.equal((await jsonRequest(`/api/staff/requests/${settledInvestment.body.request.reference}/approve-settled`, { settlementReference: 'CUST-INVEST-1001', custodianCleared: true })).response.status, 409, 'settled investments cannot be credited twice');
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' })).response.status, 200);
+      const afterInvestment = await request('/api/client/portfolio');
+      assert.equal(afterInvestment.body.nav, 14126.5);
+      assert.equal(afterInvestment.body.cash, 626);
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: false })).response.status, 400, 'explicit staff attestation is required');

@@ -150,9 +150,11 @@ async function loadPortfolio() {
   document.getElementById('account-id').textContent = data.accountId;
   requestCurrency = data.currency || 'USD';
   const hasPositiveCashBalance = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash)) && Number(data.cash) > 0;
+  const hasInvestmentCash = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash)) && Number(data.cash) >= 5000;
   document.getElementById('request-withdraw').disabled = !data.accountLinked || !hasPositiveCashBalance;
   document.getElementById('request-deposit').disabled = !data.accountLinked;
-  document.getElementById('request-invest').disabled = !data.accountLinked || requestCurrency !== 'USD';
+  document.getElementById('request-invest').disabled = !data.accountLinked || requestCurrency !== 'USD' || !hasInvestmentCash;
+  document.getElementById('investment-cash-note').hidden = !data.accountLinked || requestCurrency !== 'USD' || hasInvestmentCash;
   document.getElementById('investment-currency-note').hidden = requestCurrency === 'USD';
   document.getElementById('holding-rows').innerHTML = data.holdings.length ? data.holdings.map((h) => `<tr><td><strong>${escapeClientText(h.name)}</strong></td><td>${escapeClientText(h.type)}</td><td>${escapeClientText(h.weight)}</td><td class="amount-cell">${escapeClientText(h.value)}</td></tr>`).join('') : '<tr><td colspan="4" class="ops-empty-cell">Your linked account holdings will appear here.</td></tr>';
   document.getElementById('year').textContent = new Date().getFullYear();

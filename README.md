@@ -1,10 +1,10 @@
 # Oakstone Financial private operations
 
-Oakstone's staff and client access portal. Client credentials are hashed with bcrypt, sign-in uses role-protected sessions, and new client access remains pending until an identity-verified account is linked and approved by staff.
+Oakstone's staff and client access portal. Client credentials are hashed with bcrypt, sign-in uses role-protected sessions, and staff approve pending client access only after attesting that identity was checked. Portfolio data remains unavailable until a real account is separately linked and verified.
 
 ## Start the service
 
-Use Node.js 18 or newer and provide a MongoDB database. Set these environment variables before starting:
+Use Node.js 18 or newer and provide a MongoDB database. For local development, put these settings in the ignored `.env` file; the app loads it on startup. Environment variables already set by the hosting provider take precedence, so configure the same MongoDB URI and database name in Render's Environment settings. Never commit `.env` or share its contents:
 
 - `MONGODB_URI`: connection string for the Oakstone portal database.
 - `MONGODB_DB`: database name (defaults to `oakstone_portal`).
@@ -16,7 +16,7 @@ Use Node.js 18 or newer and provide a MongoDB database. Set these environment va
 - `SMTP_FROM`: optional verified sender address; defaults to `SMTP_USER`.
 - `NODE_ENV=production`: enables secure cookies and requires MongoDB and `SESSION_SECRET`.
 
-Bootstrap 5 is installed as a local dependency and served by the application; no CDN connection is needed for the responsive interface. Run `npm install` and `npm start` (use `npm.cmd` for both commands in Windows PowerShell). Run the isolated API tests with `npm test`; they use a temporary in-memory store and do not connect to MongoDB. Serve the application through HTTPS in production. Passwords must contain at least 12 characters and no more than 72 UTF-8 bytes to match bcrypt's input limit. Do not place credentials or secrets in source files.
+Bootstrap 5 is installed as a local dependency and served by the application; no CDN connection is needed for the responsive interface. Run `npm install` and `npm start` (use `npm.cmd` for both commands in Windows PowerShell). When `MONGODB_URI` is configured, startup fails if MongoDB is unreachable rather than silently switching to temporary memory storage. Run the isolated API tests with `npm test`; tests skip `.env` loading and use a temporary in-memory store. Serve the application through HTTPS in production. Passwords must contain at least 12 characters and no more than 72 UTF-8 bytes to match bcrypt's input limit. Do not place credentials or secrets in source files.
 
 ## Cloud routing
 
@@ -33,7 +33,15 @@ The portal reads operational records from these MongoDB collections:
 - `client_requests`: client withdrawal and investment instructions, saved with a generated reference and `Pending review` status.
 - `support_messages`: private client-to-staff support messages and replies.
 
-When a client registers, the account remains pending. On the staff dashboard Clients page, staff enter the pending registration email and the exact `clientReference` of an existing `client_accounts` record. The server requires an exact `ownerEmail` and account-reference match and an explicit identity-check confirmation, then sets `identityVerified: true` and records `identityVerifiedBy`, `identityVerifiedByName`, and `identityVerifiedAt` on the account. An `account_link_audit` event records the target, account reference, verifier, timestamp, and `verificationMethod: "staff_attestation"`. The operation updates only those verification fields, preserving all unrelated account data. This is a manual staff attestation, not automated identity proof. Staff remain responsible for checking identity against Oakstone records before confirming. The existing Approve access action remains staff-only and still requires a matching active, identity-verified account. Clients cannot invoke the staff route or self-verify. Until a portfolio record is linked, the client sees account setup status instead of a balance.
+When a client registers, login remains pending until staff confirms the identity check and approves access from the Clients page. The approval records who attested and when. A client can then sign in and sees account setup status until a real portfolio record is linked. Staff can link that record later using the client's email and the account's exact `clientReference`; the server records the identity attestation on the account and in `account_link_audit`. Portfolio data remains unavailable until a matching account is linked and verified. This is a manual staff attestation, not automated identity proof. Staff remain responsible for checking identity and account ownership against Oakstone records before confirming. Clients cannot invoke staff routes or self-verify. Do not create placeholder portfolio records to enable login.
+
+In the staff dashboard's **Create and link an account** form, the external account ID is optional. When none exists, the server generates a unique `OAK-ACC-...` internal ID and stores `accountIdType: "internal"`; this ID identifies the portal record only and does not represent a custodian account or imply a balance. A genuine externally assigned account ID can be entered when available.
+
+Staff can use **Record portfolio balance** to update NAV and available cash for an existing active, identity-verified account. The update requires the exact client email and client reference, finite non-negative values, a statement or approved-feed reference, and explicit staff confirmation. The server records previous and new values, source, staff verifier, and timestamp in `account_link_audit`; it does not change holdings. Do not enter estimates or invented balances. Withdrawals remain unavailable until cash is recorded.
+
+Staff can use **Record portfolio balance** to update NAV and available cash for an existing active, verified account. The update requires the exact client email and reference, numeric non-negative values, a statement or approved-feed reference, and explicit staff confirmation. The server records the previous and new values, source reference, verifier, and timestamp in `account_link_audit`. This workflow does not modify holdings or create source data; withdrawals remain unavailable until a verified cash balance is recorded.
+
+Clients with a linked, verified account can submit a deposit request. It remains pending without changing balances. Staff can approve it from **Audit & controls** only after confirming custodian clearance and entering the settlement reference. Approval transactionally marks the request approved, adds the cleared amount to both NAV and available cash, and records the before/after balances and verifier in `client_request_audit`. Repeated approvals cannot credit the same request twice; the portal does not initiate a funds transfer.
 
 ## Withdrawal and investment instructions
 

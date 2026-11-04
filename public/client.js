@@ -28,10 +28,12 @@ function renderRequests(requests) {
   clientRequestList.innerHTML = requests.map((request) => {
     const date = new Date(request.createdAt);
     const formattedDate = Number.isNaN(date.getTime()) ? '' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-    const kind = request.type === 'withdraw' ? 'Withdrawal' : 'Investment';
+    const kinds = { withdraw: 'Withdrawal', deposit: 'Deposit', invest: 'Investment' };
+    const icons = { withdraw: '↓', deposit: '＋', invest: '↗' };
+    const kind = kinds[request.type] || 'Account';
     const amountText = new Intl.NumberFormat(undefined, { style: 'currency', currency: request.currency || 'USD' }).format(Number(request.amount));
     const tierLabel = request.tier && Object.hasOwn(investmentTiers, request.tier) ? ` · ${investmentTiers[request.tier].label} tier` : '';
-    return `<article class="client-request-row"><span class="client-request-icon ${request.type}">${request.type === 'withdraw' ? '↓' : '↗'}</span><span class="client-request-main"><strong>${kind} request</strong><small>${escapeClientText(request.reference)} · ${escapeClientText(request.accountId || request.clientReference || request.account || 'Account setup pending')}${tierLabel ? escapeClientText(tierLabel) : ''}${formattedDate ? ` · ${escapeClientText(formattedDate)}` : ''}</small>${request.note ? `<small class="client-request-note">${escapeClientText(request.note)}</small>` : ''}</span><strong class="client-request-amount">${escapeClientText(amountText)}</strong><span class="client-request-status">${escapeClientText(request.status)}</span></article>`;
+    return `<article class="client-request-row"><span class="client-request-icon ${escapeClientText(request.type)}">${icons[request.type] || '•'}</span><span class="client-request-main"><strong>${kind} request</strong><small>${escapeClientText(request.reference)} · ${escapeClientText(request.accountId || request.clientReference || request.account || 'Account setup pending')}${tierLabel ? escapeClientText(tierLabel) : ''}${formattedDate ? ` · ${escapeClientText(formattedDate)}` : ''}</small>${request.note ? `<small class="client-request-note">${escapeClientText(request.note)}</small>` : ''}</span><strong class="client-request-amount">${escapeClientText(amountText)}</strong><span class="client-request-status">${escapeClientText(request.status)}</span></article>`;
   }).join('');
 }
 async function loadRequests() {
@@ -60,23 +62,27 @@ async function loadSupportMessages(quiet = false) {
 function openRequest(type) {
   selectedRequestType = type;
   const isWithdrawal = type === 'withdraw';
+  const isDeposit = type === 'deposit';
+  const isInvestment = type === 'invest';
   const tierField = document.getElementById('investment-tier-field');
   const tierSelect = clientRequestForm.elements.tier;
-  tierField.hidden = isWithdrawal;
-  tierSelect.required = !isWithdrawal;
+  tierField.hidden = !isInvestment;
+  tierSelect.required = isInvestment;
   tierSelect.value = '';
   document.getElementById('request-currency').textContent = requestCurrency;
-  document.getElementById('client-request-title').textContent = isWithdrawal ? 'Request a withdrawal' : 'Request an investment';
+  document.getElementById('client-request-title').textContent = isWithdrawal ? 'Request a withdrawal' : isDeposit ? 'Request a deposit' : 'Request an investment';
   document.getElementById('client-request-copy').textContent = isWithdrawal
     ? 'Your relationship team will verify the linked account and available balance before processing.'
-    : 'Your relationship team will review the account instructions and required approvals before processing.';
-  document.getElementById('client-request-submit').textContent = isWithdrawal ? 'Send withdrawal request' : 'Send investment request';
+    : isDeposit
+      ? 'This request stays pending until staff confirms that the custodian cleared the funds.'
+      : 'Your relationship team will review the account instructions and required approvals before processing.';
+  document.getElementById('client-request-submit').textContent = isWithdrawal ? 'Send withdrawal request' : isDeposit ? 'Send deposit request' : 'Send investment request';
   const amount = clientRequestForm.elements.amount;
   amount.removeAttribute('max');
-  amount.min = isWithdrawal ? '1' : '5000';
+  amount.min = isInvestment ? '5000' : '1';
   amount.value = '';
   amount.step = '0.01';
-  amount.placeholder = isWithdrawal ? '0.00' : 'Choose a tier first';
+  amount.placeholder = isInvestment ? 'Choose a tier first' : '0.00';
   clientRequestForm.elements.note.value = '';
   clientRequestDialog.showModal();
 }
@@ -122,7 +128,7 @@ clientRequestForm.addEventListener('submit', async (event) => {
     showClientToast(error.message);
   } finally {
     submitButton.disabled = false;
-    document.getElementById('client-request-submit').textContent = selectedRequestType === 'withdraw' ? 'Send withdrawal request' : 'Send investment request';
+    document.getElementById('client-request-submit').textContent = selectedRequestType === 'withdraw' ? 'Send withdrawal request' : selectedRequestType === 'deposit' ? 'Send deposit request' : 'Send investment request';
   }
 });
 
@@ -143,7 +149,9 @@ async function loadPortfolio() {
   document.getElementById('account-status').textContent = data.accountLinked ? 'Linked' : 'Pending link';
   document.getElementById('account-id').textContent = data.accountId;
   requestCurrency = data.currency || 'USD';
-  document.getElementById('request-withdraw').disabled = !data.accountLinked;
+  const hasPositiveCashBalance = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash)) && Number(data.cash) > 0;
+  document.getElementById('request-withdraw').disabled = !data.accountLinked || !hasPositiveCashBalance;
+  document.getElementById('request-deposit').disabled = !data.accountLinked;
   document.getElementById('request-invest').disabled = !data.accountLinked || requestCurrency !== 'USD';
   document.getElementById('investment-currency-note').hidden = requestCurrency === 'USD';
   document.getElementById('holding-rows').innerHTML = data.holdings.length ? data.holdings.map((h) => `<tr><td><strong>${escapeClientText(h.name)}</strong></td><td>${escapeClientText(h.type)}</td><td>${escapeClientText(h.weight)}</td><td class="amount-cell">${escapeClientText(h.value)}</td></tr>`).join('') : '<tr><td colspan="4" class="ops-empty-cell">Your linked account holdings will appear here.</td></tr>';

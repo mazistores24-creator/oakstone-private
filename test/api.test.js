@@ -147,6 +147,8 @@ test('isolated API integration', async (t) => {
     await t.test('role protection and client-only endpoints', async () => {
       assert.equal((await request('/api/session')).body.user, null);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/create-account', { accountReference: 'OAK-NEW1001', accountId: 'ACCT-2002', identityChecked: true })).response.status, 401, 'create-account route requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/requests/REQ-TEST1001/approve-deposit', { settlementReference: 'CUST-TEST1001', custodianCleared: true })).response.status, 401, 'deposit approval requires staff authentication');
       for (const pathname of [
         '/api/staff/overview',
         '/api/staff/support/threads',
@@ -185,7 +187,7 @@ test('isolated API integration', async (t) => {
       assert.equal((await request('/api/client/portfolio')).response.status, 401);
     });
 
-    await t.test('staff operations and verified-account approval guard', async () => {
+    await t.test('staff identity approval and separate account linking', async () => {
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       const overview = await request('/api/staff/overview');
       assert.equal(overview.response.status, 200);
@@ -193,6 +195,9 @@ test('isolated API integration', async (t) => {
       assert.ok(Array.isArray(overview.body.pendingAccess));
       assert.equal(overview.body.pendingAccess.length, 1);
       assert.equal(overview.body.pendingAccess[0].accountReady, false);
+      assert.match(overview.body.pendingAccess[0].userId, /^[a-f\d]{24}$/i);
+      assert.equal(overview.body.pendingAccess[0].accountId, null);
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/portfolio-data', { accountReference: 'OAK-EC7752D7', nav: 10000, cash: 2000, sourceReference: 'statement-2026-11-04', dataChecked: true })).response.status, 401, 'portfolio data updates require staff authentication');
 
       const threads = await request('/api/staff/support/threads');
       assert.equal(threads.response.status, 200);
@@ -201,7 +206,71 @@ test('isolated API integration', async (t) => {
       assert.equal((await jsonRequest('/api/staff/support/client%40example.test/messages', {
         message: 'This client is not active.'
       })).response.status, 404);
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/approve', {})).response.status, 409);
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/approve', {})).response.status, 400, 'approval requires explicit identity attestation');
+      const approval = await jsonRequest('/api/staff/clients/client%40example.test/approve', { identityChecked: true });
+      assert.equal(approval.response.status, 200, 'staff can approve login before portfolio linking');
+      assert.equal(approval.body.identityVerified, true);
+      await jsonRequest('/api/logout', {});
+      const unlinkedClientLogin = await jsonRequest('/api/login/client', { email: 'client@example.test', password: 'safe-client-password-123' });
+      assert.equal(unlinkedClientLogin.response.status, 200);
+      const unlinkedPortfolio = await request('/api/client/portfolio');
+      assert.equal(unlinkedPortfolio.response.status, 200);
+      assert.equal(unlinkedPortfolio.body.accountLinked, false, 'unlinked clients can sign in without seeing portfolio data');
+      assert.equal((await jsonRequest('/api/client/requests', { type: 'deposit', amount: 100 })).response.status, 409, 'deposits require a verified linked account');
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
+      const setupRegistration = await jsonRequest('/api/register/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' });
+      assert.equal(setupRegistration.response.status, 201);
+      assert.equal((await jsonRequest('/api/staff/clients/setup-client%40example.test/create-account', { accountReference: 'OAK-SETUP1001', accountId: 'ACCT-2002', currency: 'USD', identityChecked: false })).response.status, 400, 'account creation requires explicit identity attestation');
+      const createdAccount = await jsonRequest('/api/staff/clients/setup-client%40example.test/create-account', { accountReference: 'OAK-SETUP1001', currency: 'USD', identityChecked: true });
+      assert.equal(createdAccount.response.status, 201, 'staff can create and link an account for a registered client');
+      assert.match(createdAccount.body.accountId, /^OAK-ACC-[A-F0-9]{16}$/);
+      assert.equal(createdAccount.body.accountIdType, 'internal');
+      const setupOverview = await request('/api/staff/overview');
+      const setupAccess = setupOverview.body.pendingAccess.find((client) => client.email === 'setup-client@example.test');
+      assert.equal(setupAccess.accountId, createdAccount.body.accountId, 'access requests include the generated account ID');
+      const missingDataAttestation = await jsonRequest('/api/staff/clients/setup-client%40example.test/portfolio-data', { accountReference: 'OAK-SETUP1001', nav: 15000, cash: 3500, sourceReference: 'statement-2026-11-04', dataChecked: false });
+      assert.equal(missingDataAttestation.response.status, 400, 'balance updates require staff source attestation');
+      const savedPortfolioData = await jsonRequest('/api/staff/clients/setup-client%40example.test/portfolio-data', { accountReference: 'OAK-SETUP1001', nav: 15000.75, cash: 3500.25, sourceReference: 'statement-2026-11-04', dataChecked: true });
+      assert.equal(savedPortfolioData.response.status, 200);
+      assert.equal(savedPortfolioData.body.nav, 15000.75);
+      assert.equal(savedPortfolioData.body.cash, 3500.25);
+      const duplicateAccount = await jsonRequest('/api/staff/clients/setup-client%40example.test/create-account', { accountReference: 'OAK-SETUP1001', currency: 'USD', identityChecked: true });
+      assert.equal(duplicateAccount.response.status, 409, 'duplicate account identifiers are rejected');
+      const setupApproval = await jsonRequest('/api/staff/clients/setup-client%40example.test/approve', { identityChecked: true });
+      assert.equal(setupApproval.response.status, 200);
+      await jsonRequest('/api/logout', {});
+      const setupClientLogin = await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' });
+      assert.equal(setupClientLogin.response.status, 200);
+      const setupPortfolio = await request('/api/client/portfolio');
+      assert.equal(setupPortfolio.response.status, 200);
+      assert.equal(setupPortfolio.body.accountLinked, true);
+      assert.equal(setupPortfolio.body.nav, 15000.75, 'staff-recorded NAV appears in the client portfolio');
+      assert.equal(setupPortfolio.body.cash, 3500.25, 'staff-recorded cash appears in the client portfolio');
+      assert.equal((await jsonRequest('/api/client/requests', { type: 'withdraw', amount: 1 })).response.status, 201, 'withdrawal requests use the recorded cash balance');
+      const depositRequest = await jsonRequest('/api/client/requests', { type: 'deposit', amount: 125.75, note: 'Custodian deposit test' });
+      assert.equal(depositRequest.response.status, 201);
+      assert.equal(depositRequest.body.request.status, 'Pending review');
+      assert.equal((await request('/api/client/portfolio')).body.cash, 3500.25, 'request submission does not change balances');
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
+      const missingSettlementRef = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { custodianCleared: true });
+      assert.equal(missingSettlementRef.response.status, 400, 'approval requires a custodian settlement reference');
+      const missingCustodianConfirmation = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: false });
+      assert.equal(missingCustodianConfirmation.response.status, 400, 'approval requires staff confirmation of custodian clearance');
+      const depositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
+      assert.equal(depositApproval.response.status, 200);
+      assert.equal(depositApproval.body.nav, 15126.5);
+      assert.equal(depositApproval.body.cash, 3626);
+      const duplicateDepositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
+      assert.equal(duplicateDepositApproval.response.status, 409, 'a deposit can only be credited once');
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' })).response.status, 200);
+      const afterDeposit = await request('/api/client/portfolio');
+      assert.equal(afterDeposit.body.nav, 15126.5);
+      assert.equal(afterDeposit.body.cash, 3626);
+      await jsonRequest('/api/logout', {});
+      assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: false })).response.status, 400, 'explicit staff attestation is required');
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'wrong-reference', identityChecked: true })).response.status, 404, 'account reference must exactly match');
       assert.equal((await jsonRequest('/api/staff/clients/other%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 404, 'owner email must match exactly');
@@ -209,10 +278,7 @@ test('isolated API integration', async (t) => {
       assert.equal(linked.response.status, 200);
       assert.equal(linked.body.verificationMethod, 'staff_attestation');
       assert.ok(linked.body.verifiedAt);
-      const approval = await jsonRequest('/api/staff/clients/client%40example.test/approve', {});
-      assert.equal(approval.response.status, 200, 'existing approval flow succeeds after staff link and attestation');
-      const clientLogin = await jsonRequest('/api/logout', {});
-      assert.equal(clientLogin.response.status, 200);
+      await jsonRequest('/api/logout', {});
       const clientSession = await jsonRequest('/api/login/client', { email: 'client@example.test', password: 'safe-client-password-123' });
       assert.equal(clientSession.response.status, 200);
       const linkedPortfolio = await request('/api/client/portfolio');

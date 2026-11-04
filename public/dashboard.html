@@ -18,16 +18,16 @@
       </a>
       <div class="ops-nav-label">OPERATIONS</div>
       <nav class="ops-nav" aria-label="Operations">
-        <button class="ops-nav-item active" data-view="overview"><span class="ops-nav-icon">◫</span>Overview</button>
-        <button class="ops-nav-item" data-view="housebook"><span class="ops-nav-icon">▤</span>House book</button>
-        <button class="ops-nav-item" data-view="clients"><span class="ops-nav-icon">♙</span>Clients</button>
-        <button class="ops-nav-item" data-view="support"><span class="ops-nav-icon">✉</span>Client support</button>
-        <button class="ops-nav-item" data-view="allocations"><span class="ops-nav-icon">◉</span>Allocations</button>
+        <button class="ops-nav-item active" data-view="overview" aria-label="Overview" title="Overview"><span class="ops-nav-icon">◫</span>Overview</button>
+        <button class="ops-nav-item" data-view="housebook" aria-label="House book" title="House book"><span class="ops-nav-icon">▤</span>House book</button>
+        <button class="ops-nav-item" data-view="clients" aria-label="Clients" title="Clients"><span class="ops-nav-icon">♙</span>Clients</button>
+        <button class="ops-nav-item" data-view="support" aria-label="Client support" title="Client support"><span class="ops-nav-icon">✉</span>Client support</button>
+        <button class="ops-nav-item" data-view="allocations" aria-label="Allocations" title="Allocations"><span class="ops-nav-icon">◉</span>Allocations</button>
       </nav>
       <div class="ops-nav-label controls-label">CONTROLS</div>
       <nav class="ops-nav" aria-label="Controls">
-        <button class="ops-nav-item" data-view="pricing"><span class="ops-nav-icon">⌁</span>Pricing</button>
-        <button class="ops-nav-item" data-view="audit"><span class="ops-nav-icon">◷</span>Audit &amp; controls</button>
+        <button class="ops-nav-item" data-view="pricing" aria-label="Pricing" title="Pricing"><span class="ops-nav-icon">⌁</span>Pricing</button>
+        <button class="ops-nav-item" data-view="audit" aria-label="Audit and controls" title="Audit and controls"><span class="ops-nav-icon">◷</span>Audit &amp; controls</button>
       </nav>
       <div class="ops-sidebar-bottom">
         <div class="ops-profile"><span class="ops-avatar" id="staff-initials">AC</span><span><strong id="staff-name">Staff member</strong><small>Operations team</small></span><button class="ops-more" aria-label="Profile options">···</button></div>
@@ -51,6 +51,19 @@
       </div>
     </main>
   </div>
+  <dialog class="ops-dialog deposit-approval-dialog" id="deposit-approval-dialog" aria-labelledby="deposit-approval-title">
+    <form id="deposit-approval-form" method="dialog">
+      <button class="ops-dialog-close" type="button" id="close-deposit-approval" aria-label="Close">×</button>
+      <span class="ops-kicker">CUSTODIAN SETTLEMENT</span>
+      <h2 id="deposit-approval-title">Approve cleared deposit</h2>
+      <p>Approval adds this deposit to both NAV and available cash. Confirm settlement with the custodian first.</p>
+      <input type="hidden" name="reference">
+      <label for="deposit-settlement-reference">Custodian settlement reference</label>
+      <input class="form-control" id="deposit-settlement-reference" name="settlementReference" maxlength="200" required>
+      <label class="account-link-confirm"><input type="checkbox" name="custodianCleared" required> I confirmed the custodian shows these funds as cleared.</label>
+      <button class="ops-primary btn btn-primary" type="submit">Approve deposit and update balances</button>
+    </form>
+  </dialog>
   <div class="ops-toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/vendor/bootstrap.bundle.min.js"></script>
   <script src="/brand.js"></script>

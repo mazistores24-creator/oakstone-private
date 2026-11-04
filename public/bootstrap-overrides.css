@@ -283,6 +283,8 @@ body {
 }
 
 .investment-tier-summary {
+  grid-column: 1 / -1;
+  min-width: 0;
   margin-top: .75rem;
   border: 1px solid #e8edf1;
   border-radius: .45rem;
@@ -299,6 +301,27 @@ body {
 .investment-tier-summary .list-group-item strong {
   flex: 0 0 4.5rem;
   color: #172a3d;
+}
+
+.deposit-approval-dialog {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+#deposit-approval-form {
+  display: grid;
+  gap: .75rem;
+}
+
+#deposit-approval-form > p {
+  margin: 0;
+  color: #718092;
+  line-height: 1.5;
+}
+
+#deposit-approval-form > label:not(.account-link-confirm) {
+  margin: 0;
+  font-weight: 600;
 }
 
 .client-action-grid article strong {
@@ -905,5 +928,74 @@ body {
 
   .support-workspace.row {
     min-height: 600px;
+  }
+}
+
+@media (max-width: 760px) {
+  .staff-portal .ops-nav {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow: visible;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .staff-portal .ops-brand > span:not(.ops-brand-mark) {
+    display: none;
+  }
+
+  .staff-portal .ops-nav::-webkit-scrollbar,
+  .client-dashboard .side-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .staff-portal .ops-nav-item {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .staff-portal .ops-nav-icon {
+    width: auto;
+    font-size: 1.15rem;
+  }
+
+  .client-dashboard .side-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .client-dashboard .nav-item {
+    width: 2.25rem;
+    flex: 0 0 2.25rem;
+    height: 2.25rem;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .client-dashboard .nav-item span {
+    font-size: 1.15rem;
+  }
+}
+
+@media (max-width: 359px) {
+  .staff-portal .ops-nav {
+    gap: .12rem;
+  }
+
+  .staff-portal .ops-nav-item {
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
   }
 }

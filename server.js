@@ -1,3 +1,6 @@
+const path = require('path');
+if (process.env.NODE_ENV !== 'test') require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
@@ -6,7 +9,6 @@ const MongoStore = require('connect-mongo');
 const nodemailer = require('nodemailer');
 const { randomBytes } = require('crypto');
 const brand = require('./brand');
-const path = require('path');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -18,6 +20,23 @@ const investmentTiers = {
   gold: { label: 'Gold', min: 150000, max: 499999 },
   diamond: { label: 'Diamond', min: 500000, max: 1000000 }
 };
+function calculateDepositBalances(account, depositAmount) {
+  if (Array.isArray(account.holdings) && account.holdings.length && (account.nav === null || account.nav === undefined || account.cash === null || account.cash === undefined)) return null;
+  const toCents = (value) => {
+    const amount = value === null || value === undefined ? 0 : Number(value);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    const cents = Math.round((amount + Number.EPSILON) * 100);
+    return Number.isSafeInteger(cents) ? cents : null;
+  };
+  const navCents = toCents(account.nav);
+  const cashCents = toCents(account.cash);
+  const depositCents = toCents(depositAmount);
+  if (navCents === null || cashCents === null || depositCents === null || depositCents <= 0) return null;
+  const updatedNavCents = navCents + depositCents;
+  const updatedCashCents = cashCents + depositCents;
+  if (!Number.isSafeInteger(updatedNavCents) || !Number.isSafeInteger(updatedCashCents)) return null;
+  return { nav: updatedNavCents / 100, cash: updatedCashCents / 100 };
+}
 if (isProduction && !process.env.SESSION_SECRET) throw new Error('SESSION_SECRET must be configured in production.');
 if (isProduction && !process.env.MONGODB_URI) throw new Error('MONGODB_URI must be configured in production.');
 if (Boolean(process.env.STAFF_EMAIL) !== Boolean(process.env.STAFF_PASSWORD)) throw new Error('Set both STAFF_EMAIL and STAFF_PASSWORD to provision an operations user.');
@@ -55,12 +74,14 @@ const supportMessageStore = {
 let clientRequestStore = {
   create: async (request) => { memoryClientRequests.unshift(request); return request; },
   byEmail: async (email) => memoryClientRequests.filter((request) => request.email === email).slice(0, 20),
-  latest: async () => memoryClientRequests.slice(0, 6),
+  latest: async () => memoryClientRequests.slice(0, 100),
   countPending: async () => memoryClientRequests.filter((request) => request.status === 'Pending review').length
 };
 const memoryClientAccounts = process.env.NODE_ENV === 'test' && process.env.TEST_CLIENT_ACCOUNTS ? JSON.parse(process.env.TEST_CLIENT_ACCOUNTS) : [];
 const memoryAccountLinkAudit = [];
-let clientAccountStore = { findByEmail: async () => null, listActive: async () => [], findActiveForLink: async () => null, linkVerifiedAccount: async () => false };
+const memoryClientRequestAudit = [];
+let clientAccountStore = { findByEmail: async () => null, listActive: async () => [], findActiveForLink: async () => null, linkVerifiedAccount: async () => false, createVerifiedAccount: async () => false, updatePortfolioData: async () => false };
+let depositApprovalStore = { approve: async () => ({ kind: 'unavailable' }) };
 let accountLinkAuditStore = { record: async (event) => { memoryAccountLinkAudit.push(event); } };
 let houseBookStore = { list: async () => [] };
 let priceStore = { list: async () => [] };
@@ -68,14 +89,22 @@ let userStore = {
   find: async (email) => memoryUsers.get(email.toLowerCase()) || null,
   create: async (user) => {
     if (memoryUsers.has(user.email)) return false;
-    memoryUsers.set(user.email, user);
+    memoryUsers.set(user.email, { ...user, _id: randomBytes(12).toString('hex') });
     return true;
   },
   listPending: async () => [...memoryUsers.values()].filter((user) => user.role === 'client' && user.status === 'pending'),
-  approve: async (email) => {
+  approve: async (email, { verifier, verifiedAt }) => {
     const user = memoryUsers.get(email.toLowerCase());
     if (!user || user.role !== 'client' || user.status !== 'pending') return false;
-    user.status = 'active';
+    Object.assign(user, {
+      status: 'active',
+      approvedAt: verifiedAt,
+      approvedBy: verifier.email,
+      approvedByName: verifier.name,
+      identityVerifiedAt: verifiedAt,
+      identityVerifiedBy: verifier.email,
+      identityVerifiedByName: verifier.name
+    });
     memoryUsers.set(user.email, user);
     return true;
   }
@@ -103,9 +132,20 @@ async function initializeUsers() {
           try { await collection.insertOne(user); return true; }
           catch (error) { if (error.code === 11000) return false; throw error; }
         },
-        listPending: async () => collection.find({ role: 'client', status: 'pending' }, { projection: { email: 1, name: 1, clientReference: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray(),
-        approve: async (email) => {
-          const result = await collection.updateOne({ email: email.toLowerCase(), role: 'client', status: 'pending' }, { $set: { status: 'active', approvedAt: new Date() } });
+        listPending: async () => collection.find({ role: 'client', status: 'pending' }, { projection: { _id: 1, email: 1, name: 1, clientReference: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray(),
+        approve: async (email, { verifier, verifiedAt }) => {
+          const result = await collection.updateOne(
+            { email: email.toLowerCase(), role: 'client', status: 'pending' },
+            { $set: {
+              status: 'active',
+              approvedAt: verifiedAt,
+              approvedBy: verifier.email,
+              approvedByName: verifier.name,
+              identityVerifiedAt: verifiedAt,
+              identityVerifiedBy: verifier.email,
+              identityVerifiedByName: verifier.name
+            } }
+          );
           return result.modifiedCount === 1;
         }
       };
@@ -115,9 +155,11 @@ async function initializeUsers() {
       clientRequestStore = {
         create: async (request) => { await requests.insertOne(request); return request; },
         byEmail: async (email) => requests.find({ email }).sort({ createdAt: -1 }).limit(20).toArray(),
-        latest: async () => requests.find({}).sort({ createdAt: -1 }).limit(6).toArray(),
+        latest: async () => requests.find({}).sort({ createdAt: -1 }).limit(100).toArray(),
         countPending: async () => requests.countDocuments({ status: 'Pending review' })
       };
+      const requestAudit = database.collection('client_request_audit');
+      await requestAudit.createIndex({ requestReference: 1 }, { unique: true });
       const supportMessages = database.collection('support_messages');
       await supportMessages.createIndex({ email: 1, createdAt: 1 });
       supportMessageStore.create = async (message) => {
@@ -137,12 +179,109 @@ async function initializeUsers() {
         findByEmail: async (email) => accounts.findOne({ ownerEmail: email, status: 'active', identityVerified: true }),
         listActive: async () => accounts.find({ status: 'active', identityVerified: true }).toArray(),
         findActiveForLink: async (email, accountReference) => accounts.find({ ownerEmail: email, clientReference: accountReference }).limit(2).toArray(),
+        createVerifiedAccount: async (account) => {
+          const duplicate = await accounts.findOne({ $or: [{ clientReference: account.clientReference }, { accountId: account.accountId }] });
+          if (duplicate) return false;
+          await accounts.insertOne(account);
+          return true;
+        },
+        updatePortfolioData: async ({ email, accountReference, nav, cash, sourceReference, verifier, updatedAt }) => {
+          const result = await accounts.updateOne(
+            { ownerEmail: email, clientReference: accountReference, status: 'active', identityVerified: true },
+            { $set: {
+              nav,
+              cash,
+              portfolioDataSource: sourceReference,
+              portfolioDataUpdatedAt: updatedAt,
+              portfolioDataUpdatedBy: verifier.email,
+              portfolioDataUpdatedByName: verifier.name
+            } }
+          );
+          return result.matchedCount === 1;
+        },
         linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
           const result = await accounts.updateOne(
             { ownerEmail: email, clientReference: accountReference },
             { $set: { status: 'active', identityVerified: true, identityVerifiedBy: verifier.email, identityVerifiedByName: verifier.name, identityVerifiedAt: verifiedAt } }
           );
           return result.matchedCount === 1;
+        }
+      };
+      depositApprovalStore = {
+        approve: async ({ reference, settlementReference, verifier, approvedAt }) => {
+          const session = mongoClient.startSession();
+          let outcome = null;
+          try {
+            await session.withTransaction(async () => {
+              outcome = null;
+              const deposit = await requests.findOne({ reference, type: 'deposit', status: 'Pending review' }, { session });
+              if (!deposit) {
+                outcome = { kind: 'not-pending' };
+                return;
+              }
+              const account = await accounts.findOne({
+                ownerEmail: deposit.email,
+                clientReference: deposit.clientReference,
+                status: 'active',
+                identityVerified: true
+              }, { session });
+              if (!account) {
+                outcome = { kind: 'account-not-found' };
+                return;
+              }
+              const balances = calculateDepositBalances(account, Number(deposit.amount));
+              if (!balances) {
+                outcome = { kind: 'balance-baseline-required' };
+                return;
+              }
+              const accountUpdate = await accounts.updateOne(
+                { _id: account._id, ownerEmail: deposit.email, clientReference: deposit.clientReference, status: 'active', identityVerified: true },
+                { $set: {
+                  nav: balances.nav,
+                  cash: balances.cash,
+                  depositUpdatedAt: approvedAt,
+                  depositUpdatedBy: verifier.email,
+                  depositUpdatedByName: verifier.name,
+                  depositSettlementReference: settlementReference
+                } },
+                { session }
+              );
+              if (accountUpdate.matchedCount !== 1) throw new Error('Verified account changed during deposit approval.');
+              const requestUpdate = await requests.updateOne(
+                { _id: deposit._id, status: 'Pending review' },
+                { $set: {
+                  status: 'Approved',
+                  approvedAt,
+                  approvedBy: verifier.email,
+                  approvedByName: verifier.name,
+                  settlementReference
+                } },
+                { session }
+              );
+              if (requestUpdate.modifiedCount !== 1) throw new Error('Deposit request changed during approval.');
+              await requestAudit.insertOne({
+                requestReference: reference,
+                action: 'deposit_approved',
+                email: deposit.email,
+                accountReference: deposit.clientReference,
+                accountId: deposit.accountId,
+                amount: Number(deposit.amount),
+                currency: deposit.currency,
+                settlementReference,
+                previousNav: account.nav ?? null,
+                previousCash: account.cash ?? null,
+                nav: balances.nav,
+                cash: balances.cash,
+                verifierEmail: verifier.email,
+                verifierName: verifier.name,
+                createdAt: approvedAt
+              }, { session });
+              outcome = { kind: 'approved', nav: balances.nav, cash: balances.cash, currency: deposit.currency, accountId: deposit.accountId };
+            });
+            return outcome;
+          } finally {
+            await session.endSession();
+          }
         }
       };
       const accountLinkAudit = database.collection('account_link_audit');
@@ -157,7 +296,7 @@ async function initializeUsers() {
       console.warn('MongoDB unavailable; using in-memory storage:', error.message);
       if (mongoClient) await mongoClient.close().catch(() => {});
       mongoClient = undefined;
-      if (isProduction) throw error;
+      if (isProduction || process.env.MONGODB_URI) throw error;
     }
   }
   if (storeMode === 'memory') {
@@ -166,11 +305,74 @@ async function initializeUsers() {
       findByEmail: async (email) => memoryClientAccounts.find((account) => account.ownerEmail === email && account.status === 'active' && account.identityVerified === true) || null,
       listActive: async () => memoryClientAccounts.filter((account) => account.status === 'active' && account.identityVerified === true),
       findActiveForLink: async (email, accountReference) => memoryClientAccounts.filter((account) => account.ownerEmail === email && account.clientReference === accountReference).slice(0, 2),
+      createVerifiedAccount: async (account) => {
+        if (memoryClientAccounts.some((item) => item.clientReference === account.clientReference || item.accountId === account.accountId)) return false;
+        memoryClientAccounts.push(account);
+        return true;
+      },
+      updatePortfolioData: async ({ email, accountReference, nav, cash, sourceReference, verifier, updatedAt }) => {
+        const account = memoryClientAccounts.find((item) => item.ownerEmail === email && item.clientReference === accountReference && item.status === 'active' && item.identityVerified === true);
+        if (!account) return false;
+        Object.assign(account, {
+          nav,
+          cash,
+          portfolioDataSource: sourceReference,
+          portfolioDataUpdatedAt: updatedAt,
+          portfolioDataUpdatedBy: verifier.email,
+          portfolioDataUpdatedByName: verifier.name
+        });
+        return true;
+      },
       linkVerifiedAccount: async ({ email, accountReference, verifier, verifiedAt }) => {
         const account = memoryClientAccounts.find((item) => item.ownerEmail === email && item.clientReference === accountReference);
         if (!account) return false;
         Object.assign(account, { status: 'active', identityVerified: true, identityVerifiedBy: verifier.email, identityVerifiedByName: verifier.name, identityVerifiedAt: verifiedAt });
         return true;
+      }
+    };
+    depositApprovalStore = {
+      approve: async ({ reference, settlementReference, verifier, approvedAt }) => {
+        const deposit = memoryClientRequests.find((request) => request.reference === reference && request.type === 'deposit' && request.status === 'Pending review');
+        if (!deposit) return { kind: 'not-pending' };
+        const accounts = memoryClientAccounts.filter((account) => account.ownerEmail === deposit.email && account.clientReference === deposit.clientReference && account.status === 'active' && account.identityVerified === true);
+        if (accounts.length !== 1) return { kind: 'account-not-found' };
+        const account = accounts[0];
+        const previousNav = account.nav ?? null;
+        const previousCash = account.cash ?? null;
+        const balances = calculateDepositBalances(account, Number(deposit.amount));
+        if (!balances) return { kind: 'balance-baseline-required' };
+        Object.assign(account, {
+          ...balances,
+          depositUpdatedAt: approvedAt,
+          depositUpdatedBy: verifier.email,
+          depositUpdatedByName: verifier.name,
+          depositSettlementReference: settlementReference
+        });
+        Object.assign(deposit, {
+          status: 'Approved',
+          approvedAt,
+          approvedBy: verifier.email,
+          approvedByName: verifier.name,
+          settlementReference
+        });
+        memoryClientRequestAudit.unshift({
+          requestReference: reference,
+          action: 'deposit_approved',
+          email: deposit.email,
+          accountReference: deposit.clientReference,
+          accountId: deposit.accountId,
+          amount: Number(deposit.amount),
+          currency: deposit.currency,
+          settlementReference,
+          previousNav,
+          previousCash,
+          nav: balances.nav,
+          cash: balances.cash,
+          verifierEmail: verifier.email,
+          verifierName: verifier.name,
+          createdAt: approvedAt
+        });
+        return { kind: 'approved', nav: balances.nav, cash: balances.cash, currency: deposit.currency, accountId: deposit.accountId };
       }
     };
   }
@@ -304,10 +506,18 @@ app.get('/api/staff/overview', requireRole('staff'), async (_req, res) => {
     const currency = currencies.size === 1 ? [...currencies][0] : 'USD';
     const formatMoney = (value, currencyCode = currency) => value !== null && value !== undefined && Number.isFinite(Number(value)) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode, maximumFractionDigits: 0 }).format(Number(value)) : '—';
     const pendingUsers = await userStore.listPending();
-    const pendingAccess = await Promise.all(pendingUsers.map(async (user) => ({
-      email: user.email, name: user.name, clientReference: user.clientReference,
-      createdAt: user.createdAt, accountReady: (await clientAccountStore.findByEmail(user.email))?.identityVerified === true
-    })));
+    const pendingAccess = await Promise.all(pendingUsers.map(async (user) => {
+      const account = await clientAccountStore.findByEmail(user.email);
+      return {
+        userId: user._id ? String(user._id) : null,
+        email: user.email,
+        name: user.name,
+        clientReference: user.clientReference,
+        accountId: account?.accountId || null,
+        createdAt: user.createdAt,
+        accountReady: account?.identityVerified === true
+      };
+    }));
     const clients = accounts.map((account) => ({
       name: account.name || account.clientReference || 'Client account',
       code: String(account.name || account.clientReference || 'CA').split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(),
@@ -332,7 +542,7 @@ app.get('/api/staff/overview', requireRole('staff'), async (_req, res) => {
       ledger: ledgerEntries.map((entry) => ({ date: entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—', ref: entry.reference || entry.ref || '—', account: entry.accountName || entry.clientReference || '—', description: entry.description || entry.type || '—', amount: formatMoney(entry.amount, entry.currency || currency), status: entry.status || 'Recorded' })),
       allocations,
       pricing: prices.map((price) => ({ ticker: price.symbol, name: price.name || price.description || '', price: String(price.price ?? '—'), move: String(price.change ?? '—'), up: Number(price.change) >= 0 })),
-      audit: recentRequests.map((request) => ({ reference: request.reference, createdAt: request.createdAt, status: request.status, initials: request.type === 'withdraw' ? 'WD' : 'IN', person: request.email, action: `submitted a ${request.type === 'withdraw' ? 'withdrawal' : 'investment'} request`, context: `${request.accountId || request.clientReference || 'Account reference pending'} · ${formatMoney(request.amount, request.currency || currency)}${request.tier && investmentTiers[request.tier] ? ` · ${investmentTiers[request.tier].label}` : ''}`, time: new Date(request.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }))
+      audit: recentRequests.map((request) => ({ reference: request.reference, email: request.email, createdAt: request.createdAt, status: request.status, type: request.type, initials: request.type === 'withdraw' ? 'WD' : request.type === 'deposit' ? 'DP' : 'IN', person: request.email, action: `submitted a ${request.type === 'withdraw' ? 'withdrawal' : request.type === 'deposit' ? 'deposit' : 'investment'} request`, context: `${request.accountId || request.clientReference || 'Account reference pending'} · ${formatMoney(request.amount, request.currency || currency)}${request.tier && investmentTiers[request.tier] ? ` · ${investmentTiers[request.tier].label}` : ''}`, time: new Date(request.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }))
     });
   } catch (error) {
     console.error('Staff overview failed:', error.message);
@@ -341,16 +551,89 @@ app.get('/api/staff/overview', requireRole('staff'), async (_req, res) => {
 });
 app.post('/api/staff/clients/:email/approve', requireRole('staff'), async (req, res) => {
   const email = String(req.params.email || '').toLowerCase();
+  if (req.body.identityChecked !== true) return res.status(400).json({ error: 'Confirm that staff checked the client identity before approving access.' });
   try {
     const user = await userStore.find(email);
     if (!user || user.role !== 'client' || user.status !== 'pending') return res.status(404).json({ error: 'Pending client access was not found.' });
-    const account = await clientAccountStore.findByEmail(email);
-    if (!account || account.identityVerified !== true) return res.status(409).json({ error: 'Link and verify the client account before approving access.' });
-    if (!(await userStore.approve(email))) return res.status(409).json({ error: 'Client access could not be approved.' });
-    res.json({ ok: true });
+    const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
+    const verifiedAt = new Date();
+    if (!(await userStore.approve(email, { verifier, verifiedAt }))) return res.status(409).json({ error: 'Client access could not be approved.' });
+    res.json({ ok: true, identityVerified: true, approvedAt: verifiedAt });
   } catch (error) {
     console.error('Client access approval failed:', error.message);
     res.status(500).json({ error: 'Client access could not be approved.' });
+  }
+});
+app.post('/api/staff/clients/:email/create-account', requireRole('staff'), async (req, res) => {
+  const emailInput = String(req.params.email || '').trim();
+  const email = emailInput.toLowerCase();
+  const accountReference = typeof req.body.accountReference === 'string' ? req.body.accountReference.trim() : '';
+  const externalAccountId = typeof req.body.accountId === 'string' ? req.body.accountId.trim() : '';
+  const accountName = typeof req.body.accountName === 'string' ? req.body.accountName.trim() : '';
+  const currency = typeof req.body.currency === 'string' ? req.body.currency.trim().toUpperCase() : 'USD';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput) || !accountReference || accountReference.length > 120 || /[\r\n]/.test(accountReference) || externalAccountId.length > 120 || /[\r\n]/.test(externalAccountId) || accountName.length > 120 || /[\r\n]/.test(accountName)) return res.status(400).json({ error: 'Enter a valid client email, account reference, and optional external account ID.' });
+  if (!/^[A-Z]{3}$/.test(currency)) return res.status(400).json({ error: 'Enter a valid three-letter account currency.' });
+  try { new Intl.NumberFormat('en-US', { style: 'currency', currency }); }
+  catch { return res.status(400).json({ error: 'Enter a supported account currency.' }); }
+  if (req.body.identityChecked !== true) return res.status(400).json({ error: 'Confirm that staff checked the client identity and account ownership.' });
+  try {
+    const user = await userStore.find(email);
+    if (!user || user.role !== 'client' || !['pending', 'active'].includes(user.status)) return res.status(404).json({ error: 'Client access was not found.' });
+    const createdAt = new Date();
+    const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
+    const accountId = externalAccountId || `OAK-ACC-${randomBytes(8).toString('hex').toUpperCase()}`;
+    const accountIdType = externalAccountId ? 'external' : 'internal';
+    const account = {
+      ownerEmail: email,
+      clientReference: accountReference,
+      accountId,
+      accountIdType,
+      name: accountName || user.name || 'Investment account',
+      currency,
+      status: 'active',
+      identityVerified: true,
+      identityVerifiedBy: verifier.email,
+      identityVerifiedByName: verifier.name,
+      identityVerifiedAt: createdAt,
+      createdAt
+    };
+    if (!(await clientAccountStore.createVerifiedAccount(account))) return res.status(409).json({ error: 'An account with this reference or account ID already exists. Use the existing-account link form if it belongs to this client.' });
+    await accountLinkAuditStore.record({ action: 'client_account_created_and_linked', targetEmail: email, accountReference, accountId, accountIdType, verifierEmail: verifier.email, verifierName: verifier.name, identityChecked: true, verificationMethod: 'staff_attestation', createdAt });
+    return res.status(201).json({ ok: true, accountLinked: true, identityVerified: true, accountId, accountIdType, createdAt });
+  } catch (error) {
+    console.error('Client account creation failed:', error.message);
+    return res.status(500).json({ error: 'Client account could not be created.' });
+  }
+});
+app.post('/api/staff/clients/:email/portfolio-data', requireRole('staff'), async (req, res) => {
+  const emailInput = String(req.params.email || '').trim();
+  const email = emailInput.toLowerCase();
+  const accountReference = typeof req.body.accountReference === 'string' ? req.body.accountReference.trim() : '';
+  const { nav, cash } = req.body;
+  const sourceReference = typeof req.body.sourceReference === 'string' ? req.body.sourceReference.trim() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput) || !accountReference || accountReference.length > 120 || /[\r\n]/.test(accountReference)) return res.status(400).json({ error: 'Enter a valid client email and account reference.' });
+  if (typeof nav !== 'number' || !Number.isFinite(nav) || nav < 0 || nav > Number.MAX_SAFE_INTEGER || typeof cash !== 'number' || !Number.isFinite(cash) || cash < 0 || cash > Number.MAX_SAFE_INTEGER) return res.status(400).json({ error: 'Enter finite, non-negative NAV and cash amounts.' });
+  if (!sourceReference || sourceReference.length > 200 || /[\r\n]/.test(sourceReference)) return res.status(400).json({ error: 'Enter a statement or approved-feed reference for these values.' });
+  if (req.body.dataChecked !== true) return res.status(400).json({ error: 'Confirm that the NAV and cash values were checked against the stated source.' });
+  try {
+    const user = await userStore.find(email);
+    if (!user || user.role !== 'client' || !['pending', 'active'].includes(user.status)) return res.status(404).json({ error: 'Client access was not found.' });
+    const matchingAccounts = await clientAccountStore.findActiveForLink(email, accountReference);
+    if (matchingAccounts.length !== 1 || matchingAccounts[0].status !== 'active' || matchingAccounts[0].identityVerified !== true) return res.status(404).json({ error: 'No unique active, verified account matches this client and reference.' });
+    const account = matchingAccounts[0];
+    const updatedAt = new Date();
+    const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
+    if (!(await clientAccountStore.updatePortfolioData({ email, accountReference, nav, cash, sourceReference, verifier, updatedAt }))) return res.status(409).json({ error: 'The verified account could not be updated.' });
+    await accountLinkAuditStore.record({
+      action: 'portfolio_data_updated', targetEmail: email, accountReference, accountId: account.accountId,
+      previousNav: account.nav ?? null, previousCash: account.cash ?? null, nav, cash,
+      currency: account.currency || 'USD', sourceReference, verifierEmail: verifier.email,
+      verifierName: verifier.name, dataChecked: true, createdAt: updatedAt
+    });
+    return res.json({ ok: true, accountId: account.accountId, nav, cash, currency: account.currency || 'USD', updatedAt });
+  } catch (error) {
+    console.error('Portfolio data update failed:', error.message);
+    return res.status(500).json({ error: 'Portfolio balances could not be updated.' });
   }
 });
 app.post('/api/staff/clients/:email/link-account', requireRole('staff'), async (req, res) => {
@@ -361,7 +644,7 @@ app.post('/api/staff/clients/:email/link-account', requireRole('staff'), async (
   if (req.body.identityChecked !== true) return res.status(400).json({ error: 'Confirm that staff checked the client identity before linking.' });
   try {
     const user = await userStore.find(email);
-    if (!user || user.role !== 'client' || user.status !== 'pending') return res.status(404).json({ error: 'Pending client access was not found.' });
+    if (!user || user.role !== 'client' || !['pending', 'active'].includes(user.status)) return res.status(404).json({ error: 'Client access was not found.' });
     const matchingAccounts = await clientAccountStore.findActiveForLink(email, accountReference);
     if (matchingAccounts.length !== 1) return res.status(404).json({ error: 'No unique active account matches this exact email and account reference.' });
     const verifiedAt = new Date();
@@ -435,12 +718,12 @@ app.get('/api/client/requests', requireRole('client'), async (req, res) => {
   catch (error) { console.error('Client request lookup failed:', error.message); res.status(500).json({ error: 'Request history could not be loaded.' }); }
 });
 app.post('/api/client/requests', requireRole('client'), async (req, res) => {
-  const type = req.body.type === 'withdraw' || req.body.type === 'invest' ? req.body.type : null;
+  const type = ['withdraw', 'invest', 'deposit'].includes(req.body.type) ? req.body.type : null;
   const amount = Number(req.body.amount);
   const tierId = type === 'invest' ? String(req.body.tier || '').toLowerCase() : null;
   const tier = tierId && Object.hasOwn(investmentTiers, tierId) ? investmentTiers[tierId] : null;
   const note = String(req.body.note || '').trim().slice(0, 240);
-  if (!type) return res.status(400).json({ error: 'Choose a withdrawal or investment request.' });
+  if (!type) return res.status(400).json({ error: 'Choose a withdrawal, deposit, or investment request.' });
   if (!Number.isFinite(amount) || amount <= 0 || amount > Number.MAX_SAFE_INTEGER) return res.status(400).json({ error: 'Enter a valid positive amount.' });
   if (type === 'invest' && !tier) return res.status(400).json({ error: 'Choose a valid investment tier.' });
   if (type === 'invest' && (amount < tier.min || amount > tier.max)) return res.status(400).json({ error: `The amount must be between $${tier.min.toLocaleString('en-US')} and $${tier.max.toLocaleString('en-US')} for the ${tier.label} tier.` });
@@ -449,13 +732,32 @@ app.post('/api/client/requests', requireRole('client'), async (req, res) => {
     const account = await clientAccountStore.findByEmail(req.session.user.email);
     if (!account) return res.status(409).json({ error: 'Link and verify an account before submitting a transaction request.' });
     if (type === 'invest' && (account.currency || 'USD') !== 'USD') return res.status(409).json({ error: 'Investment tiers are denominated in USD and are available only for USD-linked accounts.' });
-    if (type === 'withdraw' && Number.isFinite(Number(account.cash)) && amount > Number(account.cash)) return res.status(400).json({ error: 'The request exceeds the available account cash.' });
-    const request = { reference: `REQ-${randomBytes(4).toString('hex').toUpperCase()}`, email: req.session.user.email, name: req.session.user.name, clientReference: req.session.user.clientReference || null, accountId: account.accountId || req.session.user.clientReference || null, accountName: account.name || 'Investment account', currency: account.currency || 'USD', type, ...(tier ? { tier: tierId } : {}), amount: amount.toFixed(2), note, status: 'Pending review', createdAt };
+    if (type === 'withdraw' && (account.cash === null || account.cash === undefined || !Number.isFinite(Number(account.cash)))) return res.status(409).json({ error: 'The available cash balance is not on file for this account.' });
+    if (type === 'withdraw' && amount > Number(account.cash)) return res.status(400).json({ error: 'The request exceeds the available account cash.' });
+    const request = { reference: `REQ-${randomBytes(4).toString('hex').toUpperCase()}`, email: req.session.user.email, name: req.session.user.name, clientReference: account.clientReference || req.session.user.clientReference || null, accountId: account.accountId || req.session.user.clientReference || null, accountName: account.name || 'Investment account', currency: account.currency || 'USD', type, ...(tier ? { tier: tierId } : {}), amount: amount.toFixed(2), note, status: 'Pending review', createdAt };
     await clientRequestStore.create(request);
     res.status(201).json({ request: { reference: request.reference, account: request.accountName, accountId: request.accountId, currency: request.currency, type: request.type, tier: request.tier || null, amount: request.amount, note: request.note, status: request.status, createdAt: request.createdAt.toISOString() } });
   } catch (error) {
     console.error('Client request could not be saved:', error.message);
     res.status(500).json({ error: 'Your request could not be saved. Please try again.' });
+  }
+});
+app.post('/api/staff/requests/:reference/approve-deposit', requireRole('staff'), async (req, res) => {
+  const reference = String(req.params.reference || '').trim();
+  const settlementReference = typeof req.body.settlementReference === 'string' ? req.body.settlementReference.trim() : '';
+  if (!reference || reference.length > 120 || !settlementReference || settlementReference.length > 200 || /[\r\n]/.test(settlementReference)) return res.status(400).json({ error: 'Enter the deposit request reference and custodian settlement reference.' });
+  if (req.body.custodianCleared !== true) return res.status(400).json({ error: 'Confirm that the custodian shows the deposit as cleared.' });
+  try {
+    const verifier = { email: req.session.user.email, name: req.session.user.name || req.session.user.email };
+    const result = await depositApprovalStore.approve({ reference, settlementReference, verifier, approvedAt: new Date() });
+    if (result.kind === 'not-pending') return res.status(409).json({ error: 'This deposit request is not pending or has already been processed.' });
+    if (result.kind === 'account-not-found') return res.status(409).json({ error: 'The verified linked account for this deposit request could not be found.' });
+    if (result.kind === 'balance-baseline-required') return res.status(409).json({ error: 'Record verified starting balances before approving a deposit for an account with holdings.' });
+    if (result.kind !== 'approved') return res.status(500).json({ error: 'The deposit could not be approved.' });
+    return res.json({ ok: true, requestReference: reference, accountId: result.accountId, nav: result.nav, cash: result.cash, currency: result.currency });
+  } catch (error) {
+    console.error('Deposit approval failed:', error.message);
+    return res.status(500).json({ error: 'The deposit could not be approved.' });
   }
 });
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));

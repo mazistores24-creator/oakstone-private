@@ -20,7 +20,7 @@ function ledgerTable(rows, compact = false) {
 }
 function requestEvents() {
   return state.data.audit.map((event, index) => ({
-    date: new Date(event.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }), ref: event.reference, actor: event.person, action: event.action.toUpperCase(), target: event.context, detail: event.status, status: event.status
+    date: new Date(event.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }), ref: event.reference, actor: event.person, email: event.email || event.person, type: event.type, action: event.action.toUpperCase(), target: event.context, detail: event.status, status: event.status
   })).filter((event) => matchesQuery(event.date, event.ref, event.actor, event.action, event.target, event.detail));
 }
 function recentRequestTable(events) {
@@ -45,19 +45,23 @@ function renderHouseBook() {
 function renderClients() {
   if (!state.data) return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}<section class="ops-card ops-data-empty" role="status"><strong>Loading client data</strong><span>The client directory will appear when the dashboard data finishes loading.</span></section>`;
   const clients = (Array.isArray(state.data.clients) ? state.data.clients : []).filter((client) => matchesQuery(client.name, client.type, client.status));
-  const pendingAccess = (Array.isArray(state.data.pendingAccess) ? state.data.pendingAccess : []).filter((client) => matchesQuery(client.email, client.clientReference));
+  const pendingAccess = (Array.isArray(state.data.pendingAccess) ? state.data.pendingAccess : []).filter((client) => matchesQuery(client.email, client.userId, client.clientReference, client.accountId));
   const columns = [
     { label: 'CLIENT / ACCOUNT', render: (client) => `<span class="ops-client-name"><i>${escapeHtml(client.code)}</i><strong>${escapeHtml(client.name)}</strong></span>` },
     { label: 'MANDATE', key: 'type' }, { label: 'HOUSE BOOK', render: (client) => `<span class="ops-amount">${escapeHtml(client.value)}</span>` },
     { label: 'STATUS', render: (client) => `<span class="ops-status">${escapeHtml(client.status)}</span>` }, { label: 'LAST REVIEW', key: 'reviewed' }
   ];
   const accessColumns = [
+    { label: 'USER ID', render: (client) => escapeHtml(client.userId || '—') },
     { label: 'EMAIL', key: 'email' }, { label: 'CLIENT REFERENCE', key: 'clientReference' },
-    { label: 'ACCOUNT CHECK', render: (client) => `<span class="ops-status ${client.accountReady ? 'ops-status-active' : 'ops-status-review'}">${client.accountReady ? 'Linked and verified' : 'Link and verify account'}</span>` },
-    { label: 'ACCESS', render: (client) => `<button class="ops-outline-button" data-action="approve-client" data-email="${escapeHtml(client.email)}" ${client.accountReady ? '' : 'disabled'}>Approve access</button>` }
+    { label: 'ACCOUNT ID', render: (client) => escapeHtml(client.accountId || 'Not linked') },
+    { label: 'PORTFOLIO', render: (client) => `<span class="ops-status ${client.accountReady ? 'ops-status-active' : 'ops-status-review'}">${client.accountReady ? 'Linked and verified' : 'Not linked'}</span>` },
+    { label: 'ACCESS', render: (client) => `<div class="client-access-actions"><label class="account-link-confirm"><input type="checkbox" data-action="approve-client-identity" data-email="${escapeHtml(client.email)}"> I verified identity</label><button class="ops-outline-button" data-action="approve-client" data-email="${escapeHtml(client.email)}" disabled>Approve access</button></div>` }
   ];
-  const linkForm = `<form id="staff-account-link-form" class="ops-card account-link-form"><div class="ops-card-heading"><div><span class="ops-kicker">STAFF ATTESTATION</span><h2>Link a pending client</h2></div></div><p>Match the pending registration email to an existing active account. Verify identity manually before submitting. This records staff attestation, not automated proof.</p><div class="row g-3"><div class="col-md-5"><label for="link-client-email">Pending client email</label><input class="form-control" id="link-client-email" name="email" type="email" maxlength="254" required></div><div class="col-md-4"><label for="link-account-reference">Existing account reference</label><input class="form-control" id="link-account-reference" name="accountReference" maxlength="120" required></div><div class="col-md-3 d-flex align-items-end"><button class="ops-outline-button" type="submit">Link account</button></div></div><label class="account-link-confirm"><input type="checkbox" name="identityChecked" required> I checked the client’s identity against Oakstone’s records and confirm this account belongs to them.</label></form>`;
-  return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}${linkForm}<section class="ops-card ops-list-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">CLIENT DIRECTORY</span><p>${clients.length} linked records</p></div><button class="ops-outline-button" data-action="export-clients">↓ Export</button></div>${table(clients, columns, 'No linked client accounts are available.')}</section><section class="ops-card ops-list-card pending-access-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">ACCESS REQUESTS</span><p>${pendingAccess.length} waiting for review. Approve only after identity and account checks are complete.</p></div></div>${table(pendingAccess, accessColumns, 'No client access requests are waiting for review.')}</section>`;
+  const createAccountForm = `<form id="staff-account-create-form" class="ops-card account-link-form"><div class="ops-card-heading"><div><span class="ops-kicker">STAFF ATTESTATION</span><h2>Create and link an account</h2></div></div><p>Enter an external account ID if one exists; otherwise Oakstone generates an internal ID. No balances, cash, performance, or holdings are created.</p><div class="row g-3"><div class="col-md-3"><label for="create-account-email">Client email</label><input class="form-control" id="create-account-email" name="email" type="email" maxlength="254" required></div><div class="col-md-3"><label for="create-account-reference">Client reference</label><input class="form-control" id="create-account-reference" name="accountReference" maxlength="120" required></div><div class="col-md-3"><label for="create-account-id">External account ID (optional)</label><input class="form-control" id="create-account-id" name="accountId" maxlength="120" placeholder="Auto-generated if blank"></div><div class="col-md-3"><label for="create-account-currency">Currency</label><input class="form-control" id="create-account-currency" name="currency" value="USD" minlength="3" maxlength="3" pattern="[A-Za-z]{3}" required></div><div class="col-md-6"><label for="create-account-name">Account name (optional)</label><input class="form-control" id="create-account-name" name="accountName" maxlength="120"></div></div><label class="account-link-confirm"><input type="checkbox" name="identityChecked" required> I verified the client identity and account identifiers against Oakstone’s records.</label><button class="ops-outline-button" type="submit">Create and link</button></form>`;
+  const portfolioDataForm = `<form id="staff-portfolio-data-form" class="ops-card account-link-form"><div class="ops-card-heading"><div><span class="ops-kicker">STAFF DATA ATTESTATION</span><h2>Record portfolio balance</h2></div></div><p>Enter NAV and available cash from a verified statement or approved feed. This updates an existing linked account and does not change holdings.</p><div class="row g-3"><div class="col-md-3"><label for="portfolio-client-email">Client email</label><input class="form-control" id="portfolio-client-email" name="email" type="email" maxlength="254" required></div><div class="col-md-3"><label for="portfolio-account-reference">Client reference</label><input class="form-control" id="portfolio-account-reference" name="accountReference" maxlength="120" required></div><div class="col-md-3"><label for="portfolio-nav">Net asset value (NAV)</label><input class="form-control" id="portfolio-nav" name="nav" type="number" min="0" step="0.01" required></div><div class="col-md-3"><label for="portfolio-cash">Available cash</label><input class="form-control" id="portfolio-cash" name="cash" type="number" min="0" step="0.01" required></div><div class="col-md-6"><label for="portfolio-source-reference">Statement / approved-feed reference</label><input class="form-control" id="portfolio-source-reference" name="sourceReference" maxlength="200" required></div></div><label class="account-link-confirm"><input type="checkbox" name="dataChecked" required> I checked these values against the source reference above.</label><button class="ops-outline-button" type="submit">Save verified balances</button></form>`;
+  const linkForm = `<form id="staff-account-link-form" class="ops-card account-link-form"><div class="ops-card-heading"><div><span class="ops-kicker">STAFF ATTESTATION</span><h2>Link a client account</h2></div></div><p>Match the client email to an existing account record. Verify identity and account ownership manually before submitting.</p><div class="row g-3"><div class="col-md-5"><label for="link-client-email">Client email</label><input class="form-control" id="link-client-email" name="email" type="email" maxlength="254" required></div><div class="col-md-4"><label for="link-account-reference">Existing account reference</label><input class="form-control" id="link-account-reference" name="accountReference" maxlength="120" required></div><div class="col-md-3 d-flex align-items-end"><button class="ops-outline-button" type="submit">Link account</button></div></div><label class="account-link-confirm"><input type="checkbox" name="identityChecked" required> I checked the client’s identity against Oakstone’s records and confirm this account belongs to them.</label></form>`;
+  return `${pageHeading('OPERATIONS / CLIENTS', 'Clients', 'Review linked accounts and pending client access.')}${createAccountForm}${portfolioDataForm}${linkForm}<section class="ops-card ops-list-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">CLIENT DIRECTORY</span><p>${clients.length} linked records</p></div><button class="ops-outline-button" data-action="export-clients">↓ Export</button></div>${table(clients, columns, 'No linked client accounts are available.')}</section><section class="ops-card ops-list-card pending-access-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">ACCESS REQUESTS</span><p>${pendingAccess.length} waiting for identity review. Portfolio linking can happen later.</p></div></div>${table(pendingAccess, accessColumns, 'No client access requests are waiting for review.')}</section>`;
 }
 function renderAllocations() {
   const list = state.data.allocations.filter((item) => matchesQuery(item.client, item.mix));
@@ -79,7 +83,8 @@ function renderAudit() {
   const events = requestEvents();
   const columns = [
     { label: 'DATE / REF', render: (event) => `<strong>${escapeHtml(event.date)}</strong><small>${escapeHtml(event.ref)}</small>` }, { label: 'CLIENT', key: 'actor' }, { label: 'REQUEST', key: 'action' },
-    { label: 'ACCOUNT', key: 'target' }, { label: 'STATUS', render: (event) => `<span class="ops-status ops-status-review">${escapeHtml(event.status)}</span>` }
+    { label: 'ACCOUNT', key: 'target' }, { label: 'STATUS', render: (event) => `<span class="ops-status ${event.status === 'Approved' ? 'ops-status-active' : 'ops-status-review'}">${escapeHtml(event.status)}</span>` },
+    { label: 'REVIEW', render: (event) => event.type === 'deposit' && event.status === 'Pending review' ? `<button type="button" class="ops-outline-button" data-action="approve-deposit" data-reference="${escapeHtml(event.ref)}">Approve deposit</button>` : event.type === 'deposit' && event.status === 'Approved' ? 'Approved' : '—' }
   ];
   const openRequests = state.data.metrics.find((metric) => metric.label === 'Open requests')?.value || '0';
   return `${pageHeading('CONTROLS / AUDIT & CONTROLS', 'Audit & controls', 'Review client instructions submitted through the portal.', '<button class="ops-outline-button" data-action="export-requests">↓ Export requests</button>')}  <section class="ops-stat-grid audit-stats row g-3">${card('Open requests', openRequests, 'Withdrawal and investment instructions', '◷')}${card('Linked clients', String(state.data.clients.length), 'Active account records', '♙')}${card('House book entries', String(state.data.ledger.length), 'From the account ledger', '▤')}</section><section class="ops-card ops-audit-card"><div class="ops-list-toolbar"><div><span class="ops-kicker">CLIENT INSTRUCTIONS</span><p>Showing the most recent requests. All new instructions require account and operational review.</p></div></div>${table(events, columns, 'No client requests are waiting for review.')}</section><section class="ops-card ops-control-note"><span class="ops-note-check">✓</span><div><strong>Request handling</strong><p>Submitted instructions are saved for staff review. Execution requires the connected custodian workflow and required approvals.</p></div></section>`;
@@ -176,19 +181,34 @@ document.querySelectorAll('.ops-nav-item').forEach((item) => item.addEventListen
 document.getElementById('global-search').addEventListener('input', (event) => { state.query = event.target.value.trim(); render(); const input = document.getElementById('global-search'); input.focus(); input.setSelectionRange(input.value.length, input.value.length); });
 document.getElementById('share-access').disabled = true;
 document.querySelectorAll('#logout, #logout-mobile').forEach((button) => button.addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); location.replace('/'); }));
+document.getElementById('close-deposit-approval').addEventListener('click', () => document.getElementById('deposit-approval-dialog').close());
 document.addEventListener('click', async (event) => {
   const target = event.target.closest('[data-view], [data-action], [data-support-email]');
   if (!target) return;
   if (target.dataset.supportEmail) { await selectSupportConversation(target.dataset.supportEmail); return; }
   if (target.dataset.view) { state.view = target.dataset.view; state.query = ''; document.getElementById('global-search').value = ''; render(); return; }
   const action = target.dataset.action;
+  if (action === 'approve-client-identity') {
+    const controls = target.closest('.client-access-actions');
+    const button = controls?.querySelector('[data-action="approve-client"]');
+    if (button) button.disabled = !target.checked;
+    return;
+  }
+  if (action === 'approve-deposit') {
+    const form = document.getElementById('deposit-approval-form');
+    form.elements.reference.value = target.dataset.reference;
+    form.elements.settlementReference.value = '';
+    form.elements.custodianCleared.checked = false;
+    document.getElementById('deposit-approval-dialog').showModal();
+    return;
+  }
   if (action === 'export-ledger') download('oakstone-house-book.csv', csv([['Date','Reference','Account','Description','Amount','Status'], ...state.data.ledger.map((row) => [row.date,row.ref,row.account,row.description,row.amount,row.status])]));
   if (action === 'export-clients') download('oakstone-clients.csv', csv([['Client','Mandate','House book','Status','Last review'], ...state.data.clients.map((client) => [client.name,client.type,client.value,client.status,client.reviewed])]));
   if (action === 'export-requests') download('oakstone-client-requests.csv', csv([['Date','Reference','Client','Request','Account','Status'], ...requestEvents().map((request) => [request.date,request.ref,request.actor,request.action,request.target,request.status])]));
   if (action === 'approve-client') {
     target.disabled = true;
     try {
-      const response = await fetch(`/api/staff/clients/${encodeURIComponent(target.dataset.email)}/approve`, { method: 'POST' });
+      const response = await fetch(`/api/staff/clients/${encodeURIComponent(target.dataset.email)}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identityChecked: true }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Client access could not be approved.');
       toast('Client access approved');
@@ -200,6 +220,86 @@ document.addEventListener('click', async (event) => {
   }
 });
 document.addEventListener('submit', async (event) => {
+  const depositForm = event.target.closest('#deposit-approval-form');
+  if (depositForm) {
+    event.preventDefault();
+    const button = depositForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const reference = depositForm.elements.reference.value;
+      const response = await fetch(`/api/staff/requests/${encodeURIComponent(reference)}/approve-deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settlementReference: depositForm.elements.settlementReference.value.trim(),
+          custodianCleared: depositForm.elements.custodianCleared.checked
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'The deposit could not be approved.');
+      document.getElementById('deposit-approval-dialog').close();
+      depositForm.reset();
+      toast(`Deposit approved; ${result.currency} NAV and cash updated`);
+      await loadDashboard();
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+    return;
+  }
+  const portfolioForm = event.target.closest('#staff-portfolio-data-form');
+  if (portfolioForm) {
+    event.preventDefault();
+    const button = portfolioForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const email = portfolioForm.elements.email.value.trim();
+      const response = await fetch(`/api/staff/clients/${encodeURIComponent(email)}/portfolio-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountReference: portfolioForm.elements.accountReference.value.trim(),
+          nav: portfolioForm.elements.nav.valueAsNumber,
+          cash: portfolioForm.elements.cash.valueAsNumber,
+          sourceReference: portfolioForm.elements.sourceReference.value.trim(),
+          dataChecked: portfolioForm.elements.dataChecked.checked
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Portfolio balances could not be updated.');
+      portfolioForm.reset();
+      toast('Verified balances saved');
+      await loadDashboard();
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+    return;
+  }
+  const createForm = event.target.closest('#staff-account-create-form');
+  if (createForm) {
+    event.preventDefault();
+    const button = createForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const email = createForm.elements.email.value.trim();
+      const response = await fetch(`/api/staff/clients/${encodeURIComponent(email)}/create-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountReference: createForm.elements.accountReference.value.trim(),
+          accountId: createForm.elements.accountId.value.trim(),
+          accountName: createForm.elements.accountName.value.trim(),
+          currency: createForm.elements.currency.value.trim(),
+          identityChecked: createForm.elements.identityChecked.checked
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Client account could not be created.');
+      createForm.reset();
+      createForm.elements.currency.value = 'USD';
+      toast(result.accountIdType === 'internal' ? `Linked with internal account ID ${result.accountId}` : 'Account created and linked');
+      await loadDashboard();
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+    return;
+  }
   const linkForm = event.target.closest('#staff-account-link-form');
   if (linkForm) {
     event.preventDefault();

@@ -86,10 +86,26 @@ body {
 }
 
 .client-access-legal {
+  position: static;
+  flex: 0 0 auto;
+  width: 100%;
   max-width: 560px;
+  margin: 0;
   color: #59655f;
   font-size: .8rem;
   line-height: 1.5;
+}
+
+.client-access-form-side {
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.client-access-card {
+  width: min(440px, 100%);
+  flex: 0 0 auto;
+  margin: 0 auto;
 }
 
 .staff-access-card h2 {

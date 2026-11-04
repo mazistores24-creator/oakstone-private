@@ -254,6 +254,11 @@ test('isolated API integration', async (t) => {
       assert.equal((await request('/api/client/portfolio')).body.cash, 3500.25, 'request submission does not change balances');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
+      const pendingDepositOverview = await request('/api/staff/overview');
+      const pendingDepositEvent = pendingDepositOverview.body.audit.find((event) => event.reference === depositRequest.body.request.reference);
+      assert.equal(pendingDepositEvent.type, 'deposit');
+      assert.equal(pendingDepositEvent.status, 'Pending review');
+      assert.equal(pendingDepositEvent.email, 'setup-client@example.test');
       const missingSettlementRef = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { custodianCleared: true });
       assert.equal(missingSettlementRef.response.status, 400, 'approval requires a custodian settlement reference');
       const missingCustodianConfirmation = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: false });
@@ -264,6 +269,9 @@ test('isolated API integration', async (t) => {
       assert.equal(depositApproval.body.cash, 3626);
       const duplicateDepositApproval = await jsonRequest(`/api/staff/requests/${depositRequest.body.request.reference}/approve-deposit`, { settlementReference: 'CUST-SETTLE-1001', custodianCleared: true });
       assert.equal(duplicateDepositApproval.response.status, 409, 'a deposit can only be credited once');
+      const approvedDepositOverview = await request('/api/staff/overview');
+      const approvedDepositEvent = approvedDepositOverview.body.audit.find((event) => event.reference === depositRequest.body.request.reference);
+      assert.equal(approvedDepositEvent.status, 'Approved');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' })).response.status, 200);
       const afterDeposit = await request('/api/client/portfolio');

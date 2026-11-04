@@ -60,6 +60,38 @@ body {
   font-size: 1.65rem;
 }
 
+.client-access-switch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem 1rem;
+  width: 100%;
+  color: #586760;
+  font-size: .9rem;
+  line-height: 1.4;
+}
+
+.client-access-switch a {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  color: #34483e;
+  font-size: .9rem;
+  font-weight: 600;
+}
+
+.client-access-switch a b {
+  color: #9c8251;
+}
+
+.client-access-legal {
+  max-width: 560px;
+  color: #59655f;
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
 .staff-access-card h2 {
   font-size: 1.8rem;
 }
@@ -416,6 +448,8 @@ body {
   }
 
   .client-access-form-side {
+    flex-direction: column;
+    align-items: stretch;
     min-height: 430px;
     padding: 4rem 1.5rem 3rem;
   }

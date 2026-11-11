@@ -43,7 +43,7 @@ Clients with a linked, verified account can submit withdrawal, deposit, and inve
 
 ## Withdrawal and investment instructions
 
-Investment requests include Bronze ($5,000–$34,999, 12 months), Silver ($35,000–$149,999), Gold ($150,000–$499,999), or Diamond ($500,000–$1,000,000) membership tiers. These ranges are denominated in USD; the app validates the chosen amount and only enables tier requests for USD-linked accounts with sufficient recorded cash. No daily return is stated or promised. The server saves instructions for staff review and displays them in the client request history and staff audit view. A request does not itself transfer funds or place an investment order. To execute transactions, connect and authorize the custodian or brokerage API and its approval workflow; that provider is not currently configured in this codebase.
+Investment requests include Bronze ($5,000–$34,999, 12 months), Silver ($35,000–$149,999), Gold ($150,000–$499,999), or Diamond ($500,000–$1,000,000) membership tiers. These ranges are denominated in USD; the app validates the chosen amount and only enables tier requests for USD-linked accounts with sufficient recorded cash. The server saves instructions for staff review and displays them in the client request history and staff audit view. A request does not itself transfer the Fund or place an investment order. To execute transactions, connect and authorize the custodian or brokerage API and its approval workflow; that provider is not currently configured in this codebase.
 
 ## Client support and contact email
 

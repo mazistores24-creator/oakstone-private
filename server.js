@@ -72,6 +72,7 @@ app.use((req, _res, next) => {
 const staffSeed = process.env.STAFF_EMAIL && process.env.STAFF_PASSWORD ? { email: process.env.STAFF_EMAIL.toLowerCase(), password: process.env.STAFF_PASSWORD, role: 'staff', name: process.env.STAFF_NAME || 'Operations user' } : null;
 const memoryUsers = new Map();
 const memoryClientRequests = [];
+const memoryInvestmentRecords = [];
 const memorySupportMessages = [];
 const publicContactAttempts = new Map();
 const supportMessageStore = {
@@ -93,6 +94,10 @@ let clientRequestStore = {
   byEmail: async (email) => memoryClientRequests.filter((request) => request.email === email).slice(0, 20),
   latest: async () => memoryClientRequests.slice(0, 100),
   countPending: async () => memoryClientRequests.filter((request) => request.status === 'Pending review').length
+};
+let investmentRecordStore = {
+  create: async (record) => { memoryInvestmentRecords.unshift(record); return record; },
+  byEmail: async (email) => memoryInvestmentRecords.filter((record) => record.email === email).slice(0, 100)
 };
 const memoryClientAccounts = process.env.NODE_ENV === 'test' && process.env.TEST_CLIENT_ACCOUNTS ? JSON.parse(process.env.TEST_CLIENT_ACCOUNTS) : [];
 const memoryAccountLinkAudit = [];
@@ -174,6 +179,12 @@ async function initializeUsers() {
         byEmail: async (email) => requests.find({ email }).sort({ createdAt: -1 }).limit(20).toArray(),
         latest: async () => requests.find({}).sort({ createdAt: -1 }).limit(100).toArray(),
         countPending: async () => requests.countDocuments({ status: 'Pending review' })
+      };
+      const investmentRecords = database.collection('client_investment_records');
+      await investmentRecords.createIndex({ email: 1, investmentDate: -1, createdAt: -1 });
+      investmentRecordStore = {
+        create: async (record) => { await investmentRecords.insertOne(record); return record; },
+        byEmail: async (email) => investmentRecords.find({ email }).sort({ investmentDate: -1, createdAt: -1 }).limit(100).toArray()
       };
       const requestAudit = database.collection('client_request_audit');
       await requestAudit.createIndex({ requestReference: 1 }, { unique: true });
@@ -658,6 +669,50 @@ app.post('/api/staff/clients/:email/portfolio-data', requireRole('staff'), async
     return res.status(500).json({ error: 'Portfolio balances could not be updated.' });
   }
 });
+app.post('/api/staff/clients/:email/investments', requireRole('staff'), async (req, res) => {
+  const emailInput = String(req.params.email || '').trim();
+  const email = emailInput.toLowerCase();
+  const accountReference = typeof req.body.accountReference === 'string' ? req.body.accountReference.trim() : '';
+  const amount = req.body.amount;
+  const expectedReturnAmount = req.body.expectedReturnAmount;
+  const investmentDate = typeof req.body.investmentDate === 'string' ? req.body.investmentDate : '';
+  const expectedReturnDate = typeof req.body.expectedReturnDate === 'string' ? req.body.expectedReturnDate : '';
+  const isValidDate = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput) || !accountReference || accountReference.length > 120 || /[\r\n]/.test(accountReference)) return res.status(400).json({ error: 'Enter a valid client email and account reference.' });
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || amount > Number.MAX_SAFE_INTEGER || typeof expectedReturnAmount !== 'number' || !Number.isFinite(expectedReturnAmount) || expectedReturnAmount < 0 || expectedReturnAmount > Number.MAX_SAFE_INTEGER) return res.status(400).json({ error: 'Enter a valid invested amount and a non-negative estimated return amount.' });
+  if (!isValidDate(investmentDate) || !isValidDate(expectedReturnDate) || investmentDate > new Date().toISOString().slice(0, 10) || expectedReturnDate < investmentDate) return res.status(400).json({ error: 'Enter a valid investment date and an expected return date on or after it.' });
+  if (req.body.dataChecked !== true) return res.status(400).json({ error: 'Confirm that the investment details were checked against the client records.' });
+  try {
+    const user = await userStore.find(email);
+    if (!user || user.role !== 'client' || user.status !== 'active') return res.status(404).json({ error: 'Active client was not found.' });
+    const account = await clientAccountStore.findByEmail(email);
+    if (!account || account.clientReference !== accountReference) return res.status(404).json({ error: 'No verified linked account matches this client email and reference.' });
+    const record = {
+      reference: `INV-${randomBytes(6).toString('hex').toUpperCase()}`,
+      email,
+      clientReference: account.clientReference,
+      accountId: account.accountId || account.clientReference,
+      account: account.name || 'Investment account',
+      currency: account.currency || 'USD',
+      amount,
+      investmentDate,
+      expectedReturnAmount,
+      expectedReturnDate,
+      createdAt: new Date(),
+      recordedBy: req.session.user.email,
+      recordedByName: req.session.user.name || req.session.user.email
+    };
+    await investmentRecordStore.create(record);
+    return res.status(201).json({ investment: record });
+  } catch (error) {
+    console.error('Investment record could not be saved:', error.message);
+    return res.status(500).json({ error: 'The investment record could not be saved.' });
+  }
+});
 app.post('/api/staff/clients/:email/link-account', requireRole('staff'), async (req, res) => {
   const emailInput = String(req.params.email || '').trim();
   const email = emailInput.toLowerCase();
@@ -712,8 +767,9 @@ app.post('/api/staff/support/:email/messages', requireRole('staff'), async (req,
 app.get('/api/client/portfolio', requireRole('client'), async (req, res) => {
   try {
     const account = await clientAccountStore.findByEmail(req.session.user.email);
-    if (!account) return res.json({ name: req.session.user.name, account: 'Account setup pending', accountId: req.session.user.clientReference || 'Pending', accountLinked: false, currency: null, nav: null, performance: null, cash: null, holdings: [] });
-    res.json({ name: req.session.user.name, account: account.name || 'Investment account', accountId: account.accountId || req.session.user.clientReference, accountLinked: true, currency: account.currency || 'USD', nav: account.nav ?? null, performance: account.performance ?? null, cash: account.cash ?? null, holdings: account.holdings || [] });
+    const investments = await investmentRecordStore.byEmail(req.session.user.email);
+    if (!account) return res.json({ name: req.session.user.name, account: 'Account setup pending', accountId: req.session.user.clientReference || 'Pending', accountLinked: false, currency: null, nav: null, performance: null, cash: null, holdings: [], investments });
+    res.json({ name: req.session.user.name, account: account.name || 'Investment account', accountId: account.accountId || req.session.user.clientReference, accountLinked: true, currency: account.currency || 'USD', nav: account.nav ?? null, performance: account.performance ?? null, cash: account.cash ?? null, holdings: account.holdings || [], investments });
   } catch (error) {
     console.error('Portfolio lookup failed:', error.message);
     res.status(500).json({ error: 'Portfolio information could not be loaded.' });

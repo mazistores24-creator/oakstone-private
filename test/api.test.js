@@ -148,6 +148,7 @@ test('isolated API integration', async (t) => {
       assert.equal((await request('/api/session')).body.user, null);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: true })).response.status, 401, 'link route requires staff authentication');
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/create-account', { accountReference: 'OAK-NEW1001', accountId: 'ACCT-2002', identityChecked: true })).response.status, 401, 'create-account route requires staff authentication');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/investments', { accountReference: 'OAK-NEW1001', amount: 5000, investmentDate: '2026-11-01', expectedReturnAmount: 6000, expectedReturnDate: '2027-11-01', dataChecked: true })).response.status, 401, 'investment records require staff authentication');
       assert.equal((await jsonRequest('/api/staff/requests/REQ-TEST1001/approve-settled', { settlementReference: 'CUST-TEST1001', custodianCleared: true })).response.status, 401, 'settlement approval requires staff authentication');
       for (const pathname of [
         '/api/staff/overview',
@@ -197,7 +198,7 @@ test('isolated API integration', async (t) => {
       assert.equal(overview.body.pendingAccess[0].accountReady, false);
       assert.match(overview.body.pendingAccess[0].userId, /^[a-f\d]{24}$/i);
       assert.equal(overview.body.pendingAccess[0].accountId, null);
-      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/portfolio-data', { accountReference: 'OAK-EC7752D7', nav: 10000, cash: 2000, sourceReference: 'statement-2026-11-04', dataChecked: true })).response.status, 401, 'portfolio data updates require staff authentication');
+      assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/portfolio-data', { accountReference: 'OAK-EC7752D7', nav: 10000, cash: 2000, sourceReference: 'statement-2026-11-04', dataChecked: true })).response.status, 404, 'staff cannot record balances for an account that is not active and verified');
 
       const threads = await request('/api/staff/support/threads');
       assert.equal(threads.response.status, 200);
@@ -293,11 +294,25 @@ test('isolated API integration', async (t) => {
       assert.equal(investmentSettlement.body.nav, 14126.5, 'investment settlement preserves NAV as cash converts to holdings');
       assert.equal(investmentSettlement.body.cash, 626);
       assert.equal((await jsonRequest(`/api/staff/requests/${settledInvestment.body.request.reference}/approve-settled`, { settlementReference: 'CUST-INVEST-1001', custodianCleared: true })).response.status, 409, 'settled investments cannot be credited twice');
+      const investmentDate = new Date().toISOString().slice(0, 10);
+      const expectedReturnDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      const investmentDetails = { accountReference: 'OAK-SETUP1001', amount: 5000, investmentDate, expectedReturnAmount: 6000, expectedReturnDate, dataChecked: true };
+      assert.equal((await jsonRequest('/api/staff/clients/setup-client%40example.test/investments', { ...investmentDetails, investmentDate: '2026-02-31' })).response.status, 400, 'invalid calendar dates are rejected');
+      assert.equal((await jsonRequest('/api/staff/clients/setup-client%40example.test/investments', { ...investmentDetails, dataChecked: false })).response.status, 400, 'staff must attest to the investment details');
+      const recordedInvestment = await jsonRequest('/api/staff/clients/setup-client%40example.test/investments', investmentDetails);
+      assert.equal(recordedInvestment.response.status, 201, 'staff can record verified client investment details');
+      assert.equal(recordedInvestment.body.investment.amount, 5000);
+      assert.equal(recordedInvestment.body.investment.expectedReturnAmount, 6000);
+      assert.equal(recordedInvestment.body.investment.expectedReturnDate, expectedReturnDate);
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/client', { email: 'setup-client@example.test', password: 'safe-setup-password-456' })).response.status, 200);
       const afterInvestment = await request('/api/client/portfolio');
       assert.equal(afterInvestment.body.nav, 14126.5);
       assert.equal(afterInvestment.body.cash, 626);
+      assert.equal(afterInvestment.body.investments.length, 1, 'recorded investments appear in the client portfolio');
+      assert.equal(afterInvestment.body.investments[0].reference, recordedInvestment.body.investment.reference);
+      assert.equal(afterInvestment.body.investments[0].investmentDate, investmentDate);
+      assert.equal((await jsonRequest('/api/staff/clients/setup-client%40example.test/investments', investmentDetails)).response.status, 401, 'clients cannot create staff investment records');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       assert.equal((await jsonRequest('/api/staff/clients/client%40example.test/link-account', { accountReference: 'OAK-EC7752D7', identityChecked: false })).response.status, 400, 'explicit staff attestation is required');

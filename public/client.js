@@ -6,6 +6,9 @@ const clientRequestList = document.getElementById('request-list');
 let selectedRequestType = 'withdraw';
 let requestCurrency = 'USD';
 let supportRequestPending = false;
+let requestIsEligible = true;
+const clientSupportToggle = document.getElementById('client-support-toggle');
+const clientSupportPanel = document.getElementById('support');
 const investmentTiers = {
   bronze: { label: 'Bronze', min: 5000, max: 34999 },
   silver: { label: 'Silver', min: 35000, max: 149999 },
@@ -20,6 +23,40 @@ function showClientToast(text) {
   clearTimeout(showClientToast.timer);
   showClientToast.timer = setTimeout(() => toast.classList.remove('show'), 3000);
 }
+function setClientSupportOpen(open) {
+  clientSupportPanel.hidden = !open;
+  clientSupportToggle.setAttribute('aria-expanded', String(open));
+  clientSupportToggle.setAttribute('aria-label', `${open ? 'Close' : 'Open'} contact support`);
+}
+clientSupportToggle.addEventListener('click', () => {
+  setClientSupportOpen(clientSupportToggle.getAttribute('aria-expanded') !== 'true');
+});
+document.querySelectorAll('a[href="#support"]').forEach((link) => {
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    setClientSupportOpen(true);
+  });
+});
+document.getElementById('client-support-close').addEventListener('click', () => setClientSupportOpen(false));
+document.querySelectorAll('.client-action-toggle, .plans-toggle').forEach((button) => {
+  button.addEventListener('click', () => {
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    button.setAttribute('aria-expanded', String(expanded));
+    document.getElementById(button.getAttribute('aria-controls')).hidden = !expanded;
+  });
+});
+document.querySelectorAll('[data-copy-wallet]').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const address = button.closest('.wallet-payment-information').querySelector('.wallet-address').textContent.trim();
+    try {
+      await navigator.clipboard.writeText(address);
+      showClientToast('Ethereum address copied.');
+    } catch (error) {
+      console.error('Wallet address could not be copied:', error);
+      showClientToast('Could not copy the address. Select and copy it manually.');
+    }
+  });
+});
 function renderRequests(requests) {
   if (!requests.length) {
     clientRequestList.innerHTML = '<p class="request-empty">No requests yet. New requests will appear here for your reference.</p>';
@@ -35,6 +72,19 @@ function renderRequests(requests) {
     const tierLabel = request.tier && Object.hasOwn(investmentTiers, request.tier) ? ` · ${investmentTiers[request.tier].label} tier` : '';
     return `<article class="client-request-row"><span class="client-request-icon ${escapeClientText(request.type)}">${icons[request.type] || '•'}</span><span class="client-request-main"><strong>${kind} request</strong><small>${escapeClientText(request.reference)} · ${escapeClientText(request.accountId || request.clientReference || request.account || 'Account setup pending')}${tierLabel ? escapeClientText(tierLabel) : ''}${formattedDate ? ` · ${escapeClientText(formattedDate)}` : ''}</small>${request.note ? `<small class="client-request-note">${escapeClientText(request.note)}</small>` : ''}</span><strong class="client-request-amount">${escapeClientText(amountText)}</strong><span class="client-request-status">${escapeClientText(request.status)}</span></article>`;
   }).join('');
+}
+function renderInvestmentRecords(records, currency) {
+  const list = document.getElementById('investment-record-list');
+  if (!records.length) {
+    list.innerHTML = '<p class="request-empty">No investment records yet.</p>';
+    return;
+  }
+  const formatMoney = (value) => new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value));
+  const formatDate = (value) => {
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  };
+  list.innerHTML = records.map((record) => `<article class="client-investment-record"><div><span class="eyebrow muted">AMOUNT INVESTED</span><strong>${escapeClientText(formatMoney(record.amount))}</strong><small>Investment date: ${escapeClientText(formatDate(record.investmentDate))}</small></div><div><span class="eyebrow muted">ESTIMATED RETURN · NOT GUARANTEED</span><strong>${escapeClientText(formatMoney(record.expectedReturnAmount))}</strong><small>Expected date: ${escapeClientText(formatDate(record.expectedReturnDate))}</small></div></article>`).join('');
 }
 async function loadRequests() {
   const response = await fetch('/api/client/requests');
@@ -66,15 +116,23 @@ function openRequest(type) {
   const isInvestment = type === 'invest';
   const tierField = document.getElementById('investment-tier-field');
   const tierSelect = clientRequestForm.elements.tier;
+  document.getElementById('investment-wallet-payment').hidden = true;
+  const requestButton = document.querySelector(`[data-request="${type}"]`);
+  requestIsEligible = requestButton ? !requestButton.disabled : true;
   tierField.hidden = !isInvestment;
   tierSelect.required = isInvestment;
   tierSelect.value = '';
+  const availability = document.getElementById('client-request-availability');
+  const availabilityStatus = document.getElementById(`${type}-availability`);
+  availability.textContent = availabilityStatus && !availabilityStatus.hidden ? availabilityStatus.textContent : '';
+  availability.hidden = !availability.textContent;
+  document.getElementById('client-request-submit-button').disabled = !requestIsEligible;
   document.getElementById('request-currency').textContent = requestCurrency;
   document.getElementById('client-request-title').textContent = isWithdrawal ? 'Request a withdrawal' : isDeposit ? 'Request a deposit' : 'Request an investment';
   document.getElementById('client-request-copy').textContent = isWithdrawal
     ? 'Your relationship team will verify the linked account and available balance before processing.'
     : isDeposit
-      ? 'This request stays pending until staff confirms that the custodian cleared the funds.'
+      ? 'This request stays pending until staff confirms that the custodian cleared the Fund.'
       : 'Your relationship team will review the account instructions and required approvals before processing.';
   document.getElementById('client-request-submit').textContent = isWithdrawal ? 'Send withdrawal request' : isDeposit ? 'Send deposit request' : 'Send investment request';
   const amount = clientRequestForm.elements.amount;
@@ -88,9 +146,20 @@ function openRequest(type) {
 }
 
 document.querySelectorAll('[data-request]').forEach((button) => button.addEventListener('click', () => openRequest(button.dataset.request)));
+document.querySelectorAll('[data-investment-tier]').forEach((button) => {
+  button.addEventListener('click', () => {
+    openRequest('invest');
+    const tierSelect = clientRequestForm.elements.tier;
+    tierSelect.value = button.dataset.investmentTier;
+    tierSelect.dispatchEvent(new Event('change'));
+  });
+});
 document.querySelector('[data-close-request]').addEventListener('click', () => clientRequestDialog.close());
 clientRequestForm.elements.tier.addEventListener('change', (event) => {
   const tier = investmentTiers[event.target.value];
+  const payment = document.getElementById('investment-wallet-payment');
+  payment.hidden = !tier;
+  if (tier) document.getElementById('payment-plan-name').textContent = `${tier.label} Plan`;
   const amount = clientRequestForm.elements.amount;
   if (!tier) {
     amount.min = '5000';
@@ -127,7 +196,7 @@ clientRequestForm.addEventListener('submit', async (event) => {
   } catch (error) {
     showClientToast(error.message);
   } finally {
-    submitButton.disabled = false;
+    submitButton.disabled = !requestIsEligible;
     document.getElementById('client-request-submit').textContent = selectedRequestType === 'withdraw' ? 'Send withdrawal request' : selectedRequestType === 'deposit' ? 'Send deposit request' : 'Send investment request';
   }
 });
@@ -149,14 +218,39 @@ async function loadPortfolio() {
   document.getElementById('account-status').textContent = data.accountLinked ? 'Linked' : 'Pending link';
   document.getElementById('account-id').textContent = data.accountId;
   requestCurrency = data.currency || 'USD';
+  const hasAvailableCash = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash));
   const hasPositiveCashBalance = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash)) && Number(data.cash) > 0;
-  const hasInvestmentCash = data.cash !== null && data.cash !== undefined && Number.isFinite(Number(data.cash)) && Number(data.cash) >= 5000;
-  document.getElementById('request-withdraw').disabled = !data.accountLinked || !hasPositiveCashBalance;
-  document.getElementById('request-deposit').disabled = !data.accountLinked;
-  document.getElementById('request-invest').disabled = !data.accountLinked || requestCurrency !== 'USD' || !hasInvestmentCash;
-  document.getElementById('investment-cash-note').hidden = !data.accountLinked || requestCurrency !== 'USD' || hasInvestmentCash;
-  document.getElementById('investment-currency-note').hidden = requestCurrency === 'USD';
+  const hasInvestmentCash = hasAvailableCash && Number(data.cash) >= 5000;
+  const withdrawalUnavailable = !data.accountLinked
+    ? 'Link and verify an account before requesting a withdrawal.'
+    : !hasAvailableCash
+      ? 'A verified available cash balance must be recorded before requesting a withdrawal.'
+      : !hasPositiveCashBalance
+        ? 'A positive available cash balance is required to request a withdrawal.'
+        : '';
+  const depositUnavailable = data.accountLinked ? '' : 'Link and verify an account before requesting a deposit.';
+  const investmentUnavailable = !data.accountLinked
+    ? 'Link and verify an account before requesting an investment.'
+    : requestCurrency !== 'USD'
+      ? 'Investment plans are available only for USD-linked accounts.'
+      : !hasAvailableCash
+        ? 'A verified available cash balance of at least $5,000 is required.'
+        : !hasInvestmentCash
+          ? 'At least $5,000 in available cash is required to request an investment.'
+          : '';
+  [
+    ['request-withdraw', 'withdraw-availability', withdrawalUnavailable],
+    ['request-deposit', 'deposit-availability', depositUnavailable],
+    ['request-invest', 'invest-availability', investmentUnavailable]
+  ].forEach(([buttonId, statusId, unavailableReason]) => {
+    const button = document.getElementById(buttonId);
+    const status = document.getElementById(statusId);
+    button.disabled = Boolean(unavailableReason);
+    status.textContent = unavailableReason;
+    status.hidden = !unavailableReason;
+  });
   document.getElementById('holding-rows').innerHTML = data.holdings.length ? data.holdings.map((h) => `<tr><td><strong>${escapeClientText(h.name)}</strong></td><td>${escapeClientText(h.type)}</td><td>${escapeClientText(h.weight)}</td><td class="amount-cell">${escapeClientText(h.value)}</td></tr>`).join('') : '<tr><td colspan="4" class="ops-empty-cell">Your linked account holdings will appear here.</td></tr>';
+  renderInvestmentRecords(data.investments || [], data.currency || 'USD');
   document.getElementById('year').textContent = new Date().getFullYear();
   await Promise.all([
     loadRequests(),

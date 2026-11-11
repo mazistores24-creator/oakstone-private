@@ -320,9 +320,10 @@ body {
 }
 
 .client-action-grid.row {
-  display: flex;
-  grid-template-columns: none;
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 0;
 }
 
 .client-action-grid.row article {
@@ -330,13 +331,316 @@ body {
   padding: 1rem;
 }
 
+.client-action-grid.row > .client-action-card {
+  width: auto;
+  max-width: none;
+  flex: initial;
+}
+
+.client-action-grid.row .client-action-card {
+  display: block;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle,
+.client-dashboard .client-action-grid article .plans-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: .8rem;
+  padding: .8rem;
+  border: 0;
+  border-radius: .55rem;
+  background: #183d5a;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle:hover,
+.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible,
+.client-dashboard .client-action-grid article .plans-toggle:hover,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
+  background: #b42318;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px #183d5a33;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+  background: #ffffff20;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol.deposit {
+  background: #ffffff20;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol.invest {
+  background: #ffffff20;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle:hover .client-action-symbol,
+.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible .client-action-symbol {
+  background: #ffffff20;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle:hover .plans-toggle-icon,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible .plans-toggle-icon {
+  color: #fff;
+}
+
+.client-action-symbol svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy {
+  display: grid;
+  flex: 1;
+  gap: .2rem;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy strong {
+  color: inherit;
+  font-weight: 800;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy small {
+  color: #ffffffc7;
+  font-size: .78rem;
+}
+
+.client-dashboard .client-action-grid article .client-action-chevron {
+  color: #ffffffc7;
+  font-size: 1.15rem;
+  line-height: 1;
+  transition: transform .15s, color .15s;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle:hover .client-action-chevron,
+.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible .client-action-chevron,
+.client-dashboard .client-action-grid article .plans-toggle:hover .client-action-chevron,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible .client-action-chevron {
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article > .client-action-toggle[aria-expanded="true"] .client-action-chevron,
+.client-dashboard .client-action-grid article .plans-toggle[aria-expanded="true"] .client-action-chevron {
+  transform: rotate(180deg);
+}
+
+.client-action-details {
+  display: grid;
+  gap: .75rem;
+  padding: .85rem .25rem .25rem;
+}
+
+.client-action-details[hidden],
+.investment-tier-summary[hidden] {
+  display: none;
+}
+
+.client-action-details > p {
+  margin: 0;
+  color: #718092;
+}
+
+.client-action-details > .client-action-availability {
+  color: #8a4b18;
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.client-action-details > .client-action-availability[hidden] {
+  display: none;
+}
+
+.client-action-details > button[data-request] {
+  justify-self: start;
+}
+
+.wallet-payment-information {
+  display: grid;
+  justify-items: start;
+  gap: .45rem;
+  padding: .8rem;
+  background: #f5f8fc;
+  border-radius: .6rem;
+}
+
+.wallet-payment-information[hidden] {
+  display: none;
+}
+
+.wallet-qr {
+  width: min(12rem, 100%);
+  height: auto;
+  justify-self: center;
+  border-radius: .4rem;
+  background: #fff;
+}
+
+.wallet-payment-information > strong {
+  color: #172a3d;
+}
+
+.wallet-payment-information .wallet-address {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #183d5a;
+  font-size: .9rem;
+}
+
+.wallet-payment-information > small {
+  color: #64748b;
+}
+
+.wallet-copy-button {
+  padding: .4rem .7rem;
+  border: 0;
+  border-radius: .35rem;
+  background: #183d5a;
+  color: #fff;
+  font-weight: 700;
+}
+
+.wallet-copy-button:hover,
+.wallet-copy-button:focus-visible {
+  background: #c64040;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle {
+  justify-content: flex-start;
+  padding: .65rem .8rem;
+  background: #183d5a;
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle .client-action-toggle-copy {
+  display: grid;
+  flex: 1;
+  gap: .2rem;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle .client-action-toggle-copy strong {
+  color: inherit;
+  font-weight: 800;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle .client-action-toggle-copy small {
+  color: #ffffffc7;
+  font-size: .78rem;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle .client-action-chevron {
+  margin-left: auto;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle-icon {
+  color: #fff;
+  font-size: 1.1rem;
+}
+
 .investment-tier-summary {
-  grid-column: 1 / -1;
   min-width: 0;
-  margin-top: .75rem;
+  margin: 0;
   border: 1px solid #e8edf1;
   border-radius: .45rem;
   overflow: hidden;
+}
+
+.investment-plans-heading {
+  padding: .9rem;
+  background: #f6f8fa;
+}
+
+.investment-plans-heading > span {
+  color: #718092;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.investment-plans-heading h3 {
+  margin: .25rem 0 0;
+  color: #172a3d;
+  font: 700 1rem/1.35 var(--display);
+}
+
+.client-dashboard .investment-tier-summary > .investment-plan {
+  display: grid;
+  width: 100%;
+  gap: .6rem;
+  padding: .8rem .9rem;
+  border: 0;
+  border-top: 1px solid #e8edf1;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+
+.client-dashboard .investment-tier-summary > .investment-plan:hover,
+.client-dashboard .investment-tier-summary > .investment-plan:focus-visible {
+  outline: 0;
+  background: #eff5f8;
+}
+
+.investment-plan-title {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  color: #183d5a;
+  font: 700 .85rem/1.4 var(--display);
+}
+
+.investment-plan-facts {
+  display: grid;
+  gap: .3rem;
+  color: #718092;
+  font-size: .78rem;
+}
+
+.investment-plan-facts > span {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.investment-plan-facts strong {
+  margin: 0;
+  color: #172a3d;
+  font-weight: 600;
+  text-align: right;
+}
+
+.investment-plans-disclaimer {
+  margin: 0;
+  padding: .75rem .9rem;
+  border-top: 1px solid #e8edf1;
+  background: #f6f8fa;
+  color: #718092;
+  font-size: .72rem;
+  line-height: 1.5;
 }
 
 .investment-tier-summary .list-group-item {
@@ -347,8 +651,31 @@ body {
 }
 
 .investment-tier-summary .list-group-item strong {
-  flex: 0 0 4.5rem;
+  display: flex;
+  flex: 0 0 6rem;
+  align-items: center;
+  gap: .4rem;
   color: #172a3d;
+}
+
+.plan-icon {
+  font-size: .6rem;
+}
+
+.plan-icon.bronze {
+  color: #a97951;
+}
+
+.plan-icon.silver {
+  color: #87949d;
+}
+
+.plan-icon.gold {
+  color: #b69240;
+}
+
+.plan-icon.diamond {
+  color: #658f9e;
 }
 
 .deposit-approval-dialog {
@@ -820,6 +1147,131 @@ body {
   margin-top: 1rem;
 }
 
+.support-chat-panel {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 5rem;
+  z-index: 1049;
+  display: flex;
+  width: min(420px, calc(100vw - 3rem));
+  height: min(34rem, calc(100vh - 8rem));
+  max-height: calc(100vh - 8rem);
+  flex-direction: column;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #e1e8ed;
+  box-shadow: 0 16px 48px #10263d30;
+}
+
+.support-chat-panel[hidden] {
+  display: none;
+}
+
+.support-chat-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .9rem 1rem;
+  border-bottom: 1px solid #e8edf1;
+}
+
+.support-chat-header .eyebrow {
+  font-size: .65rem;
+}
+
+.support-chat-header h2 {
+  margin: .2rem 0 0;
+  color: #172a3d;
+  font: 700 1rem/1.3 var(--display);
+}
+
+.support-chat-close {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: #183d5a;
+  color: #fff;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.support-chat-close:hover,
+.support-chat-close:focus-visible {
+  background: #b42318;
+  color: #fff;
+}
+
+.support-chat-panel .support-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.support-chat-panel .support-intro {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: .85rem 1rem 0;
+  font-size: .8rem;
+}
+
+.support-chat-panel .support-messages {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  overscroll-behavior: contain;
+}
+
+.support-chat-panel .support-compose {
+  flex: 0 0 auto;
+}
+
+.support-toggle {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 1050;
+  display: inline-flex;
+  min-height: 2.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  padding: .55rem .9rem;
+  border: 0;
+  border-radius: 999px;
+  background: #183d5a;
+  color: #fff;
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 600;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+
+.support-toggle:hover,
+.support-toggle:focus-visible {
+  background: #b42318;
+  color: #fff;
+}
+
+.support-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px #183d5a33;
+}
+
+.support-toggle-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .support-intro {
   color: #718092;
   font-size: .9rem;
@@ -969,7 +1421,11 @@ body {
   justify-self: end;
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 575.98px) {
+  .client-action-grid.row {
+    grid-template-columns: 1fr;
+  }
+
   .support-thread-list {
     max-height: 250px;
     border-right: 0;
@@ -978,6 +1434,21 @@ body {
 
   .support-workspace.row {
     min-height: 600px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .support-toggle {
+    right: 1rem;
+    bottom: 1rem;
+  }
+
+  .support-chat-panel {
+    right: 1rem;
+    bottom: 4.5rem;
+    width: calc(100vw - 2rem);
+    height: calc(100vh - 6rem);
+    max-height: calc(100vh - 6rem);
   }
 }
 
@@ -1048,4 +1519,74 @@ body {
     min-width: 2rem;
     height: 2rem;
   }
+}
+
+.client-investment-record-list {
+  display: grid;
+  gap: .85rem;
+}
+
+.client-investment-record {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  background: #f5f8fc;
+  border-radius: .75rem;
+}
+
+.client-investment-record > div {
+  display: grid;
+  gap: .3rem;
+}
+
+.client-investment-record > div > strong {
+  color: #17243b;
+  font-size: 1.15rem;
+}
+
+.client-investment-record small {
+  color: #64748b;
+}
+
+@media (max-width: 575px) {
+  .client-investment-record {
+    grid-template-columns: 1fr;
+  }
+}
+
+body.staff-portal :is(p, small, label, td, a, li),
+body.oak-staff-auth :is(p, small, label, td, a, li),
+body.client-dashboard :is(p, small, label, td, a, li) {
+  font-weight: 500;
+}
+
+body.staff-portal :is(h1, h2, h3, h4, h5, h6, strong, b, th, .ops-kicker, .ops-status, .ops-amount, .ops-nav-label),
+body.oak-staff-auth :is(h1, h2, h3, h4, h5, h6, strong, b, th, .staff-access-kicker, .staff-form-step),
+body.client-dashboard :is(h1, h2, h3, h4, h5, h6, strong, b, th, .eyebrow, .sample-label) {
+  font-weight: 800;
+}
+
+body.staff-portal button,
+body.oak-staff-auth button,
+body.client-dashboard button,
+body.staff-portal input,
+body.oak-staff-auth input,
+body.client-dashboard input,
+body.staff-portal textarea,
+body.oak-staff-auth textarea,
+body.client-dashboard textarea,
+body.staff-portal select,
+body.oak-staff-auth select,
+body.client-dashboard select {
+  font-weight: 600;
+}
+
+body.staff-portal .ops-control-row strong {
+  font-weight: 800;
+}
+
+body.staff-portal .ops-control-row small,
+body.staff-portal .ops-control-row em {
+  font-weight: 600;
 }

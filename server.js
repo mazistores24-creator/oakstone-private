@@ -92,6 +92,7 @@ const supportMessageStore = {
 let clientRequestStore = {
   create: async (request) => { memoryClientRequests.unshift(request); return request; },
   byEmail: async (email) => memoryClientRequests.filter((request) => request.email === email).slice(0, 20),
+  settledInvestmentsByEmail: async (email) => memoryClientRequests.filter((request) => request.email === email && request.type === 'invest' && ['Paid', 'Approved'].includes(request.status)).slice(0, 100),
   latest: async () => memoryClientRequests.slice(0, 100),
   countPending: async () => memoryClientRequests.filter((request) => request.status === 'Pending review').length
 };
@@ -177,6 +178,7 @@ async function initializeUsers() {
       clientRequestStore = {
         create: async (request) => { await requests.insertOne(request); return request; },
         byEmail: async (email) => requests.find({ email }).sort({ createdAt: -1 }).limit(20).toArray(),
+        settledInvestmentsByEmail: async (email) => requests.find({ email, type: 'invest', status: { $in: ['Paid', 'Approved'] } }).sort({ approvedAt: -1, createdAt: -1 }).limit(100).toArray(),
         latest: async () => requests.find({}).sort({ createdAt: -1 }).limit(100).toArray(),
         countPending: async () => requests.countDocuments({ status: 'Pending review' })
       };
@@ -278,7 +280,7 @@ async function initializeUsers() {
               const requestUpdate = await requests.updateOne(
                 { _id: request._id, status: 'Pending review' },
                 { $set: {
-                  status: 'Approved',
+                  status: request.type === 'withdraw' ? 'Completed' : 'Paid',
                   approvedAt,
                   approvedBy: verifier.email,
                   approvedByName: verifier.name,
@@ -380,7 +382,7 @@ async function initializeUsers() {
           lastSettlementReference: settlementReference
         });
         Object.assign(request, {
-          status: 'Approved',
+          status: request.type === 'withdraw' ? 'Completed' : 'Paid',
           approvedAt,
           approvedBy: verifier.email,
           approvedByName: verifier.name,
@@ -766,8 +768,26 @@ app.post('/api/staff/support/:email/messages', requireRole('staff'), async (req,
 });
 app.get('/api/client/portfolio', requireRole('client'), async (req, res) => {
   try {
-    const account = await clientAccountStore.findByEmail(req.session.user.email);
-    const investments = await investmentRecordStore.byEmail(req.session.user.email);
+    const [account, recordedInvestments, settledInvestments] = await Promise.all([
+      clientAccountStore.findByEmail(req.session.user.email),
+      investmentRecordStore.byEmail(req.session.user.email),
+      clientRequestStore.settledInvestmentsByEmail(req.session.user.email)
+    ]);
+    const investments = [
+      ...recordedInvestments,
+      ...settledInvestments.map((request) => {
+        const completedAt = new Date(request.approvedAt || request.createdAt);
+        return {
+          reference: request.reference,
+          amount: Number(request.settledAmount ?? request.amount),
+          currency: request.currency || 'USD',
+          investmentDate: Number.isNaN(completedAt.getTime()) ? '' : completedAt.toISOString().slice(0, 10),
+          status: 'Paid',
+          settlementReference: request.settlementReference,
+          createdAt: request.approvedAt || request.createdAt
+        };
+      })
+    ].sort((a, b) => new Date(b.investmentDate).getTime() - new Date(a.investmentDate).getTime());
     if (!account) return res.json({ name: req.session.user.name, account: 'Account setup pending', accountId: req.session.user.clientReference || 'Pending', accountLinked: false, currency: null, nav: null, performance: null, cash: null, holdings: [], investments });
     res.json({ name: req.session.user.name, account: account.name || 'Investment account', accountId: account.accountId || req.session.user.clientReference, accountLinked: true, currency: account.currency || 'USD', nav: account.nav ?? null, performance: account.performance ?? null, cash: account.cash ?? null, holdings: account.holdings || [], investments });
   } catch (error) {
@@ -792,7 +812,13 @@ app.post('/api/client/support/messages', requireRole('client'), async (req, res)
   }
 });
 app.get('/api/client/requests', requireRole('client'), async (req, res) => {
-  try { res.json({ requests: await clientRequestStore.byEmail(req.session.user.email) }); }
+  try {
+    const requests = await clientRequestStore.byEmail(req.session.user.email);
+    res.json({ requests: requests.map((request) => ({
+      ...request,
+      status: request.status === 'Approved' ? (request.type === 'withdraw' ? 'Completed' : 'Paid') : request.status
+    })) });
+  }
   catch (error) { console.error('Client request lookup failed:', error.message); res.status(500).json({ error: 'Request history could not be loaded.' }); }
 });
 app.post('/api/client/requests', requireRole('client'), async (req, res) => {

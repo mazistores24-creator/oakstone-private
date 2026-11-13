@@ -38,7 +38,17 @@ document.querySelectorAll('a[href="#support"]').forEach((link) => {
   });
 });
 document.getElementById('client-support-close').addEventListener('click', () => setClientSupportOpen(false));
-document.querySelectorAll('.client-action-toggle, .plans-toggle').forEach((button) => {
+document.querySelectorAll('.client-action-toggle').forEach((button) => {
+  button.addEventListener('click', () => {
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    document.querySelectorAll('.client-action-toggle').forEach((actionButton) => {
+      const isExpanded = actionButton === button && expanded;
+      actionButton.setAttribute('aria-expanded', String(isExpanded));
+      document.getElementById(actionButton.getAttribute('aria-controls')).hidden = !isExpanded;
+    });
+  });
+});
+document.querySelectorAll('.plans-toggle').forEach((button) => {
   button.addEventListener('click', () => {
     const expanded = button.getAttribute('aria-expanded') !== 'true';
     button.setAttribute('aria-expanded', String(expanded));
@@ -84,7 +94,7 @@ function renderInvestmentRecords(records, currency) {
     const date = new Date(`${value}T00:00:00`);
     return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { dateStyle: 'medium' });
   };
-  list.innerHTML = records.map((record) => `<article class="client-investment-record"><div><span class="eyebrow muted">AMOUNT INVESTED</span><strong>${escapeClientText(formatMoney(record.amount))}</strong><small>Investment date: ${escapeClientText(formatDate(record.investmentDate))}</small></div><div><span class="eyebrow muted">ESTIMATED RETURN · NOT GUARANTEED</span><strong>${escapeClientText(formatMoney(record.expectedReturnAmount))}</strong><small>Expected date: ${escapeClientText(formatDate(record.expectedReturnDate))}</small></div></article>`).join('');
+  list.innerHTML = records.map((record) => `<article class="client-investment-record"><div><span class="eyebrow muted">AMOUNT INVESTED</span><strong>${escapeClientText(formatMoney(record.amount))}</strong><small>Investment date: ${escapeClientText(formatDate(record.investmentDate))}</small></div>${record.status ? `<div><span class="eyebrow muted">SETTLEMENT STATUS</span><strong>${escapeClientText(record.status)}</strong><small>Reference: ${escapeClientText(record.settlementReference || record.reference)}</small></div>` : `<div><span class="eyebrow muted">ESTIMATED RETURN · NOT GUARANTEED</span><strong>${escapeClientText(formatMoney(record.expectedReturnAmount))}</strong><small>Expected date: ${escapeClientText(formatDate(record.expectedReturnDate))}</small></div>`}</article>`).join('');
 }
 async function loadRequests() {
   const response = await fetch('/api/client/requests');

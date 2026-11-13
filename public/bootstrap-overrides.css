@@ -284,6 +284,10 @@ body {
   font-size: clamp(2rem, 4vw, 2.5rem);
 }
 
+.client-dashboard .portfolio-hero {
+  flex-wrap: wrap;
+}
+
 .client-dashboard .portfolio-change,
 .client-dashboard .account-ref small {
   font-size: .875rem;
@@ -341,63 +345,210 @@ body {
   display: block;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle,
-.client-dashboard .client-action-grid article .plans-toggle {
+.client-actions-panel.panel {
   display: flex;
-  width: 100%;
-  align-items: center;
-  gap: .8rem;
-  padding: .8rem;
-  border: 0;
-  border-radius: .55rem;
-  background: #183d5a;
-  color: #fff;
-  text-align: left;
+  flex-direction: column;
+}
+
+.client-request-disclaimer {
+  order: 2;
+}
+
+.client-dashboard .client-action-grid {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .75rem;
+  margin: 0;
+}
+
+.portfolio-action-toolbar > .plans-action-control {
+  display: grid;
+  flex: 0 0 2.85rem;
+  width: 2.85rem;
+  height: 2.85rem;
+  place-items: center;
+}
+
+.portfolio-action-toolbar .plans-toggle {
+  position: relative;
+  display: grid;
+  width: 2.85rem;
+  height: 2.85rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #ffffff35;
+  border-radius: 50%;
+  background: #ffffff12;
+  color: #d7c69e;
   cursor: pointer;
-  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s;
+  transition: background-color .15s, color .15s, box-shadow .15s;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle:hover,
-.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible,
-.client-dashboard .client-action-grid article .plans-toggle:hover,
-.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
-  background: #b42318;
+.portfolio-action-toolbar .plans-toggle:hover,
+.portfolio-action-toolbar .plans-toggle:focus-visible {
+  background: #d7c69e;
+  color: #10263d;
+}
+
+.portfolio-action-toolbar .plans-toggle[aria-expanded="true"] {
+  border-color: #c64040;
+  background: #c64040;
   color: #fff;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible,
-.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
+.portfolio-action-toolbar .plans-toggle:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px #183d5a33;
+  box-shadow: 0 0 0 3px #d7c69e55;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: 0 0 2.5rem;
-  background: #ffffff20;
+.portfolio-action-toolbar .plans-toggle-icon {
+  font-size: 1.3rem;
+  color: inherit;
+}
+
+.portfolio-action-toolbar .plans-toggle:hover .plans-toggle-icon,
+.portfolio-action-toolbar .plans-toggle:focus-visible .plans-toggle-icon {
+  color: #10263d;
+}
+
+.portfolio-action-toolbar .plans-toggle[aria-expanded="true"] .plans-toggle-icon {
   color: #fff;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol.deposit {
-  background: #ffffff20;
+.portfolio-action-toolbar .plans-toggle::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + .55rem);
+  z-index: 2;
+  width: max-content;
+  max-width: min(15rem, 80vw);
+  padding: .5rem .7rem;
+  transform: translate(-50%, .3rem);
+  border-radius: .5rem;
+  background: #10263d;
+  color: #fff;
+  font-size: .72rem;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  box-shadow: 0 10px 24px #0f1e2d2e;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+}
+
+.portfolio-action-toolbar .plans-toggle:hover::after,
+.portfolio-action-toolbar .plans-toggle:focus-visible::after {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
+}
+
+.portfolio-action-toolbar > .portfolio-action-plan-details {
+  display: grid;
+  flex: 0 0 100%;
+  gap: 0;
+  width: 100%;
+}
+
+.portfolio-action-toolbar {
+  display: flex;
+  flex: 0 0 100%;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  column-gap: clamp(1.5rem, 8vw, 4rem);
+  row-gap: .85rem;
+  width: 100%;
+  margin-top: .5rem;
+  padding-top: .85rem;
+  padding-bottom: .85rem;
+  border-top: 1px solid #ffffff29;
+}
+
+.client-dashboard .portfolio-hero .client-request-disclaimer {
+  flex: 0 0 100%;
+  margin: 0;
+  color: #bdc9d2;
+  font-size: .72rem;
+  line-height: 1.55;
+}
+
+.portfolio-action-toggle {
+  position: relative;
+  display: grid;
+  width: 2.85rem;
+  height: 2.85rem;
+  flex: 0 0 2.85rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #ffffff35;
+  border-radius: 50%;
+  background: #ffffff12;
+  color: #d7c69e;
+  cursor: pointer;
+  transition: background-color .15s, color .15s, box-shadow .15s;
+}
+
+.portfolio-action-toggle:hover,
+.portfolio-action-toggle:focus-visible {
+  background: #d7c69e;
+  color: #10263d;
+}
+
+.portfolio-action-toggle[aria-expanded="true"] {
+  border-color: #c64040;
+  background: #c64040;
   color: #fff;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-symbol.invest {
-  background: #ffffff20;
-  color: #fff;
+.portfolio-action-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px #d7c69e55;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle:hover .client-action-symbol,
-.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible .client-action-symbol {
-  background: #ffffff20;
-  color: #fff;
+.portfolio-action-toggle .client-action-symbol {
+  display: grid;
+  place-items: center;
+  color: inherit;
 }
 
-.client-dashboard .client-action-grid article .plans-toggle:hover .plans-toggle-icon,
-.client-dashboard .client-action-grid article .plans-toggle:focus-visible .plans-toggle-icon {
-  color: #fff;
+.portfolio-action-toggle .client-action-symbol svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.portfolio-action-toggle::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + .55rem);
+  z-index: 2;
+  width: max-content;
+  max-width: min(15rem, 80vw);
+  padding: .5rem .7rem;
+  transform: translate(-50%, .3rem);
+  border-radius: .5rem;
+  background: #fff;
+  color: #172a3d;
+  font-size: .72rem;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  box-shadow: 0 10px 24px #0f1e2d2e;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+}
+
+.portfolio-action-toggle:hover::after,
+.portfolio-action-toggle:focus-visible::after {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
 }
 
 .client-action-symbol svg {
@@ -410,23 +561,6 @@ body {
   stroke-width: 1.7;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy {
-  display: grid;
-  flex: 1;
-  gap: .2rem;
-  color: #fff;
-}
-
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy strong {
-  color: inherit;
-  font-weight: 800;
-}
-
-.client-dashboard .client-action-grid article > .client-action-toggle .client-action-toggle-copy small {
-  color: #ffffffc7;
-  font-size: .78rem;
-}
-
 .client-dashboard .client-action-grid article .client-action-chevron {
   color: #ffffffc7;
   font-size: 1.15rem;
@@ -434,14 +568,11 @@ body {
   transition: transform .15s, color .15s;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle:hover .client-action-chevron,
-.client-dashboard .client-action-grid article > .client-action-toggle:focus-visible .client-action-chevron,
 .client-dashboard .client-action-grid article .plans-toggle:hover .client-action-chevron,
 .client-dashboard .client-action-grid article .plans-toggle:focus-visible .client-action-chevron {
   color: #fff;
 }
 
-.client-dashboard .client-action-grid article > .client-action-toggle[aria-expanded="true"] .client-action-chevron,
 .client-dashboard .client-action-grid article .plans-toggle[aria-expanded="true"] .client-action-chevron {
   transform: rotate(180deg);
 }
@@ -450,6 +581,34 @@ body {
   display: grid;
   gap: .75rem;
   padding: .85rem .25rem .25rem;
+  width: 100%;
+  max-width: 100%;
+  grid-column: 1 / -1;
+}
+
+.portfolio-action-toolbar > .client-action-details {
+  flex: 0 0 100%;
+  padding: .85rem 0 0;
+  border-top: 1px solid #ffffff29;
+}
+
+.portfolio-action-toolbar .client-action-details > p {
+  color: #bdc9d2;
+}
+
+.portfolio-action-toolbar .client-action-details > .client-action-availability {
+  color: #d7c69e;
+}
+
+.portfolio-action-toolbar .client-action-details > button[data-request] {
+  border-color: #ffffff70;
+  color: #fff;
+}
+
+.portfolio-action-toolbar .client-action-details > button[data-request]:hover {
+  border-color: #d7c69e;
+  background: #d7c69e;
+  color: #10263d;
 }
 
 .client-action-details[hidden],
@@ -527,9 +686,18 @@ body {
 }
 
 .client-dashboard .client-action-grid article .plans-toggle {
+  display: flex;
+  width: 100%;
+  height: auto;
+  align-items: center;
   justify-content: flex-start;
+  gap: .8rem;
   padding: .65rem .8rem;
+  border: 0;
+  border-radius: .55rem;
   background: #183d5a;
+  color: #fff;
+  text-align: left;
   font-size: .85rem;
   font-weight: 600;
 }
@@ -558,6 +726,22 @@ body {
 .client-dashboard .client-action-grid article .plans-toggle-icon {
   color: #fff;
   font-size: 1.1rem;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle:hover,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
+  background: #b42318;
+  color: #fff;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px #183d5a33;
+}
+
+.client-dashboard .client-action-grid article .plans-toggle:hover .plans-toggle-icon,
+.client-dashboard .client-action-grid article .plans-toggle:focus-visible .plans-toggle-icon {
+  color: #fff;
 }
 
 .investment-tier-summary {
@@ -1044,6 +1228,15 @@ body {
     padding: 1.25rem;
   }
 
+  .client-dashboard .portfolio-action-toolbar {
+    flex: 0 0 auto;
+    margin-top: 0;
+  }
+
+  .client-dashboard .portfolio-hero .client-request-disclaimer {
+    flex: 0 0 auto;
+  }
+
   .client-dashboard .account-ref {
     min-width: 0;
     padding: .9rem 0 0;
@@ -1063,6 +1256,10 @@ body {
 
   .client-dashboard .client-action-grid.row article {
     padding: .85rem;
+  }
+
+  .client-dashboard .client-action-grid.row > .client-plans-card {
+    padding: 0;
   }
 
   .client-request-dialog {
@@ -1423,7 +1620,7 @@ body {
 
 @media (max-width: 575.98px) {
   .client-action-grid.row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .support-thread-list {

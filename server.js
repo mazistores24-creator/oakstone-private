@@ -15,10 +15,10 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString('hex');
 const isProduction = process.env.NODE_ENV === 'production';
 const investmentTiers = {
-  bronze: { label: 'Bronze', min: 5000, max: 34999 },
-  silver: { label: 'Silver', min: 35000, max: 149999 },
-  gold: { label: 'Gold', min: 150000, max: 499999 },
-  diamond: { label: 'Diamond', min: 500000, max: 1000000 }
+  root: { label: 'OakStone Root', min: 5000 },
+  power: { label: 'OakStone Power', min: 35000 },
+  legacy: { label: 'OakStone Legacy', min: 200000 },
+  mastermind: { label: 'Mastermind', min: 150000 }
 };
 function calculateSettledBalances(account, request) {
   const toCents = (value) => {
@@ -830,7 +830,12 @@ app.post('/api/client/requests', requireRole('client'), async (req, res) => {
   if (!type) return res.status(400).json({ error: 'Choose a withdrawal, deposit, or investment request.' });
   if (!Number.isFinite(amount) || amount <= 0 || amount > Number.MAX_SAFE_INTEGER) return res.status(400).json({ error: 'Enter a valid positive amount.' });
   if (type === 'invest' && !tier) return res.status(400).json({ error: 'Choose a valid investment tier.' });
-  if (type === 'invest' && (amount < tier.min || amount > tier.max)) return res.status(400).json({ error: `The amount must be between $${tier.min.toLocaleString('en-US')} and $${tier.max.toLocaleString('en-US')} for the ${tier.label} tier.` });
+  if (type === 'invest' && (amount < tier.min || (tier.max !== undefined && amount > tier.max))) {
+    const amountRange = tier.max === undefined
+      ? `at least $${tier.min.toLocaleString('en-US')}`
+      : `between $${tier.min.toLocaleString('en-US')} and $${tier.max.toLocaleString('en-US')}`;
+    return res.status(400).json({ error: `The amount must be ${amountRange} for the ${tier.label} plan.` });
+  }
   const createdAt = new Date();
   try {
     const account = await clientAccountStore.findByEmail(req.session.user.email);

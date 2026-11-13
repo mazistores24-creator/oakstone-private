@@ -10,10 +10,10 @@ let requestIsEligible = true;
 const clientSupportToggle = document.getElementById('client-support-toggle');
 const clientSupportPanel = document.getElementById('support');
 const investmentTiers = {
-  bronze: { label: 'Bronze', min: 5000, max: 34999 },
-  silver: { label: 'Silver', min: 35000, max: 149999 },
-  gold: { label: 'Gold', min: 150000, max: 499999 },
-  diamond: { label: 'Diamond', min: 500000, max: 1000000 }
+  root: { label: 'OakStone Root', min: 5000 },
+  power: { label: 'OakStone Power', min: 35000 },
+  legacy: { label: 'OakStone Legacy', min: 200000 },
+  mastermind: { label: 'Mastermind', min: 150000 }
 };
 
 function showClientToast(text) {
@@ -79,7 +79,7 @@ function renderRequests(requests) {
     const icons = { withdraw: '↓', deposit: '＋', invest: '↗' };
     const kind = kinds[request.type] || 'Account';
     const amountText = new Intl.NumberFormat(undefined, { style: 'currency', currency: request.currency || 'USD' }).format(Number(request.amount));
-    const tierLabel = request.tier && Object.hasOwn(investmentTiers, request.tier) ? ` · ${investmentTiers[request.tier].label} tier` : '';
+    const tierLabel = request.tier && Object.hasOwn(investmentTiers, request.tier) ? ` · ${investmentTiers[request.tier].label} plan` : '';
     return `<article class="client-request-row"><span class="client-request-icon ${escapeClientText(request.type)}">${icons[request.type] || '•'}</span><span class="client-request-main"><strong>${kind} request</strong><small>${escapeClientText(request.reference)} · ${escapeClientText(request.accountId || request.clientReference || request.account || 'Account setup pending')}${tierLabel ? escapeClientText(tierLabel) : ''}${formattedDate ? ` · ${escapeClientText(formattedDate)}` : ''}</small>${request.note ? `<small class="client-request-note">${escapeClientText(request.note)}</small>` : ''}</span><strong class="client-request-amount">${escapeClientText(amountText)}</strong><span class="client-request-status">${escapeClientText(request.status)}</span></article>`;
   }).join('');
 }
@@ -178,8 +178,8 @@ clientRequestForm.elements.tier.addEventListener('change', (event) => {
     return;
   }
   amount.min = String(tier.min);
-  amount.max = String(tier.max);
-  amount.placeholder = `${tier.min}–${tier.max}`;
+  amount.removeAttribute('max');
+  amount.placeholder = `$${tier.min.toLocaleString('en-US')} minimum`;
   amount.value = '';
 });
 clientRequestForm.addEventListener('submit', async (event) => {

@@ -280,11 +280,27 @@ test('isolated API integration', async (t) => {
       assert.equal(afterDeposit.body.cash, 6626);
       const afterDepositRequests = await request('/api/client/requests');
       assert.equal(afterDepositRequests.body.requests.find((item) => item.reference === depositRequest.body.request.reference).status, 'Paid');
-      assert.equal((await jsonRequest('/api/client/requests', { type: 'invest', amount: 7000, tier: 'bronze' })).response.status, 400, 'investment requests cannot exceed available cash');
+      assert.equal((await jsonRequest('/api/client/requests', { type: 'invest', amount: 7000, tier: 'root' })).response.status, 400, 'investment requests cannot exceed available cash');
+      for (const [tier, belowMinimum, minimum] of [
+        ['root', 4999, 5000],
+        ['power', 34999, 35000],
+        ['legacy', 199999, 200000],
+        ['mastermind', 149999, 150000]
+      ]) {
+        const belowMinimumRequest = await jsonRequest('/api/client/requests', { type: 'invest', amount: belowMinimum, tier });
+        assert.equal(belowMinimumRequest.response.status, 400, `${tier} rejects amounts below its minimum`);
+        assert.ok(belowMinimumRequest.body.error.includes(`at least $${minimum.toLocaleString('en-US')}`));
+      }
+      for (const [tier, minimum] of [['power', 35000], ['legacy', 200000], ['mastermind', 150000]]) {
+        const minimumRequest = await jsonRequest('/api/client/requests', { type: 'invest', amount: minimum, tier });
+        assert.equal(minimumRequest.response.status, 400);
+        assert.match(minimumRequest.body.error, /exceeds the available account cash/, `${tier} is recognized at its minimum`);
+      }
       const settledWithdrawal = await jsonRequest('/api/client/requests', { type: 'withdraw', amount: 1000 });
       assert.equal(settledWithdrawal.response.status, 201);
-      const settledInvestment = await jsonRequest('/api/client/requests', { type: 'invest', amount: 5000, tier: 'bronze' });
+      const settledInvestment = await jsonRequest('/api/client/requests', { type: 'invest', amount: 5000, tier: 'root' });
       assert.equal(settledInvestment.response.status, 201);
+      assert.equal(settledInvestment.body.request.tier, 'root');
       await jsonRequest('/api/logout', {});
       assert.equal((await jsonRequest('/api/login/staff', { email: staffEmail, password: staffPassword })).response.status, 200);
       const withdrawalSettlement = await jsonRequest(`/api/staff/requests/${settledWithdrawal.body.request.reference}/approve-settled`, { settlementReference: 'CUST-WITHDRAW-1001', custodianCleared: true });

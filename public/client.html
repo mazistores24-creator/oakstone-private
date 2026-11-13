@@ -17,10 +17,42 @@
           <div class="client-action-details" id="invest-details" hidden><p>Send an investment instruction to your relationship team.</p><div class="wallet-payment-information"><strong>Crypto receiving address · Ethereum</strong><img class="wallet-qr" src="/ethereum-wallet-qr.jpeg" alt="QR code for the Ethereum receiving address"><code class="wallet-address">0x06aD8a043f81879cc114F5919a679Ea6480BF954</code><button class="wallet-copy-button" type="button" data-copy-wallet>Copy address</button><small>Confirm the supported crypto asset with the recipient before sending. Send only on the Ethereum network. Crypto transfers cannot be reversed.</small></div><button class="btn btn-outline-secondary" type="button" id="request-invest" data-request="invest" aria-describedby="invest-availability" disabled>Request investment <span>→</span></button><p class="client-action-availability" id="invest-availability" role="status" hidden></p></div>
           <div class="investment-tier-summary portfolio-action-plan-details" id="investment-plans" aria-label="Investment plans" hidden>
             <header class="investment-plans-heading"><span>OAKSTONE FINANCIAL BROKER</span><h3>Investment Membership Tiers</h3><p>Select a plan to continue to its investment request form.</p></header>
-            <button class="investment-plan" type="button" data-investment-tier="bronze"><span class="investment-plan-title"><span aria-hidden="true">🥉</span><strong>1. BRONZE PLAN</strong></span><span class="investment-plan-facts"><span><span>Minimum Investment</span><strong>$5,000</strong></span><span><span>Maximum Investment</span><strong>$34,999</strong></span><span><span>Duration</span><strong>12 Months</strong></span></span></button>
-            <button class="investment-plan" type="button" data-investment-tier="silver"><span class="investment-plan-title"><span aria-hidden="true">🥈</span><strong>2. SILVER PLAN</strong></span><span class="investment-plan-facts"><span><span>Minimum Investment</span><strong>$35,000</strong></span><span><span>Maximum Investment</span><strong>$149,999</strong></span></span></button>
-            <button class="investment-plan" type="button" data-investment-tier="gold"><span class="investment-plan-title"><span aria-hidden="true">🥇</span><strong>3. GOLD PLAN</strong></span><span class="investment-plan-facts"><span><span>Minimum Investment</span><strong>$150,000</strong></span><span><span>Maximum Investment</span><strong>$499,999</strong></span></span></button>
-            <button class="investment-plan" type="button" data-investment-tier="diamond"><span class="investment-plan-title"><span aria-hidden="true">💎</span><strong>4. DIAMOND PLAN</strong></span><span class="investment-plan-facts"><span><span>Minimum Investment</span><strong>$500,000</strong></span><span><span>Maximum Investment</span><strong>$1,000,000</strong></span></span></button>
+            <button class="investment-plan" type="button" data-investment-tier="root">
+              <span class="investment-plan-title"><strong>A. THE OAKSTONE ROOT PLAN</strong></span>
+              <span class="investment-plan-facts">
+                <span><span>Minimum Investment</span><strong>$5,000</strong></span>
+                <span><span>Stated Daily ROI</span><strong>2.7%</strong></span>
+                <span><span>Duration</span><strong>12 Months</strong></span>
+              </span>
+              <span class="investment-plan-details">A basic checking or holding plan for keeping funds in place.</span>
+            </button>
+            <button class="investment-plan" type="button" data-investment-tier="power">
+              <span class="investment-plan-title"><strong>B. THE OAKSTONE POWER PLAN</strong></span>
+              <span class="investment-plan-facts">
+                <span><span>Minimum Investment</span><strong>$35,000</strong></span>
+                <span><span>Stated Daily ROI</span><strong>5.6%</strong></span>
+              </span>
+              <span class="investment-plan-details">A savings-style plan. Example provided: a $67,000 subscription has a stated ROI of $1,369,480 at the end of the cycle.</span>
+            </button>
+            <button class="investment-plan" type="button" data-investment-tier="legacy">
+              <span class="investment-plan-title"><strong>C. THE OAKSTONE LEGACY PLAN</strong></span>
+              <span class="investment-plan-facts">
+                <span><span>Minimum Investment</span><strong>$200,000</strong></span>
+                <span><span>Stated Daily ROI</span><strong>1.5%</strong></span>
+                <span><span>Duration</span><strong>200 Months</strong></span>
+              </span>
+              <span class="investment-plan-details">A retirement and legacy plan designed around longer-term asset growth.</span>
+            </button>
+            <button class="investment-plan" type="button" data-investment-tier="mastermind">
+              <span class="investment-plan-title"><strong>D. THE MASTERMIND PLAN</strong></span>
+              <span class="investment-plan-facts">
+                <span><span>Minimum Investment</span><strong>$150,000</strong></span>
+                <span><span>Stated Daily ROI</span><strong>37%</strong></span>
+                <span><span>Duration</span><strong>3 Months</strong></span>
+              </span>
+              <span class="investment-plan-details">A trading plan to mirror market trades from OakStone experts and AI-structured trading. An available slot is required. Experts receive a 10% commission after the cycle, and a trading certificate is included at no cost.</span>
+            </button>
+            <p class="investment-plans-disclaimer">Stated ROI and examples are not guarantees of performance or payment. Selecting a plan sends an instruction for review; this portal does not place trades or transfer funds.</p>
           </div>
         </div>
         <p class="client-request-disclaimer">After custodian settlement, deposits add to cash and NAV, withdrawals subtract from both, and investments reduce cash while NAV stays level. Investment holdings still require custodian portfolio data; the portal does not transfer the Fund or place trades.</p>
@@ -45,12 +77,12 @@
       <label for="investment-tier" class="form-label">Investment membership tier</label>
       <select class="form-select" id="investment-tier" name="tier">
         <option value="">Choose a tier</option>
-        <option value="bronze">Bronze · $5,000–$34,999 · 12 months</option>
-        <option value="silver">Silver · $35,000–$149,999</option>
-        <option value="gold">Gold · $150,000–$499,999</option>
-        <option value="diamond">Diamond · $500,000–$1,000,000</option>
+        <option value="root">OakStone Root · $5,000 minimum · 12 months</option>
+        <option value="power">OakStone Power · $35,000 minimum</option>
+        <option value="legacy">OakStone Legacy · $200,000 minimum · 200 months</option>
+        <option value="mastermind">Mastermind · $150,000 minimum · 3 months · slot required</option>
       </select>
-      <small class="form-text">Tier ranges are in USD. Requests require staff review; selection does not promise returns or place an order.</small>
+      <small class="form-text">Minimums are in USD. Requests require staff review; selection does not guarantee returns or place an order.</small>
     </div>
     <section id="investment-wallet-payment" class="wallet-payment-information" aria-label="Ethereum payment instructions" hidden>
       <strong>Payment for <span id="payment-plan-name">selected plan</span> · Ethereum</strong>
